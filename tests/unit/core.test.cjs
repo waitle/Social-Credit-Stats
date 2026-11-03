@@ -48,7 +48,7 @@ test('구매자 보호 기간: 날짜형, 남은 시간형', () => {
 });
 
 test('기본 중앙 서버 주소', () => {
-  assert.strictEqual(AES.DEFAULT_SERVER, 'https://social-credit.comio.uk');
+  assert.strictEqual(AES.DEFAULT_SERVER, 'https://social-credit.156048.xyz');
 });
 
 test('원격 설정으로 라벨 보강', () => {

@@ -8,7 +8,7 @@
 - 권한: `storage`(저장), `notifications`(알림), `alarms`(주기 실행). 웹사이트 권한은 알리 주문/추적 페이지에만 콘텐츠 스크립트를 넣는 범위로 한정됩니다.
 - 업데이트 확인: 하루 한 번 GitHub(`raw.githubusercontent.com`)의 `manifest.json`을 내려받아 버전만 비교합니다. 이때 주문 데이터는 보내지 않습니다.
 
-## 중앙 서버 (기본 `https://social-credit.comio.uk`, 설정 페이지에서 변경 가능)
+## 중앙 서버 (기본 `https://social-credit.156048.xyz`, 설정 페이지에서 변경 가능)
 
 | 기능 | 보내는 것 | 보내지 않는 것 |
 |---|---|---|
