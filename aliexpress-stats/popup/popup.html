@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>알리 주문 통계</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  body{width:350px;padding:14px}
+  header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+  .actions{display:flex;gap:6px;margin-top:12px}
+  .actions .b{flex:1}
+  .empty{color:var(--mu);text-align:center;padding:18px 0}
+</style>
+</head>
+<body>
+<header><h1>알리 주문 통계</h1><span class="muted" id="upd"></span></header>
+<div id="body"><div class="empty">불러오는 중…</div></div>
+<div class="actions">
+  <button class="b pri" id="open">주문 페이지</button>
+  <button class="b" id="refresh">지금 갱신</button>
+  <button class="b" id="opts">설정</button>
+</div>
+<div class="status" id="status"></div>
+<script src="../lib/core.js"></script>
+<script src="../lib/extract.js"></script>
+<script src="../lib/stats.js"></script>
+<script src="../content/format.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

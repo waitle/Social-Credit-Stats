@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>알리 주문 통계 · 설정</title>
+<link rel="stylesheet" href="../popup/common.css">
+<style>
+  body{max-width:640px;margin:0 auto;padding:24px 16px 48px}
+  section{border:1px solid var(--bd);border-radius:12px;padding:14px 16px;margin-top:14px}
+  section h2{margin:0 0 8px}
+  .line{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+  .line input[type=url],.line input[type=password]{flex:1;min-width:220px}
+  code{font-size:12px}
+</style>
+</head>
+<body>
+<h1>알리 주문 통계 · 설정</h1>
+<div class="muted" id="ver"></div>
+
+<section>
+  <h2>알림</h2>
+  <label class="row"><input type="checkbox" data-notify="delivered"> 배송 완료</label>
+  <label class="row"><input type="checkbox" data-notify="eta"> 도착 예정일 변경</label>
+  <label class="row"><input type="checkbox" data-notify="refund"> 환불 완료</label>
+  <label class="row"><input type="checkbox" data-notify="protect"> 구매자 보호 기간 임박</label>
+  <label class="row"><input type="checkbox" data-notify="customs"> 관세 면세 한도 주의</label>
+</section>
+
+<section>
+  <h2>백그라운드 자동 갱신</h2>
+  <div class="line">
+    <select id="bg">
+      <option value="0">끔</option><option value="3">3시간마다</option><option value="6">6시간마다</option>
+      <option value="12">12시간마다</option><option value="24">하루마다</option>
+    </select>
+    <button class="b" id="bgNow">지금 갱신</button>
+  </div>
+  <div class="muted" id="bgLast"></div>
+  <div class="status" id="bgStatus"></div>
+</section>
+
+<section>
+  <h2>업데이트</h2>
+  <div id="updInfo" class="muted"></div>
+  <div class="line">
+    <input type="url" id="updSrc" placeholder="업데이트 확인 주소 (비우면 GitHub 기본값)">
+    <button class="b" id="updNow">지금 확인</button>
+  </div>
+  <div class="status" id="updStatus"></div>
+</section>
+
+<section>
+  <h2>중앙 서버</h2>
+  <div class="line">
+    <input type="url" id="srv" placeholder="https://example.com">
+    <button class="b" id="srvTest">연결 확인</button>
+  </div>
+  <label class="row"><input type="checkbox" id="tel"> 익명 상태 보고 (실패 사유 코드와 확장 버전만 전송)</label>
+  <div class="status" id="srvStatus"></div>
+</section>
+
+<section>
+  <h2>암호화 백업</h2>
+  <div class="line">
+    <input type="password" id="pass" placeholder="백업 비밀번호 (8자 이상)" autocomplete="new-password">
+  </div>
+  <div class="line">
+    <button class="b" id="bkUp">서버에 백업</button>
+    <button class="b" id="bkDown">서버에서 복원</button>
+  </div>
+  <div class="status" id="bkStatus"></div>
+</section>
+
+<script src="../lib/core.js"></script>
+<script src="../lib/extract.js"></script>
+<script src="../lib/stats.js"></script>
+<script src="../lib/backup.js"></script>
+<script src="options.js"></script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-// 주문 상세 페이지를 백그라운드 탭으로 열어 "예상 배송일"을 읽어오는 오케스트레이터
+// 주문 상세 페이지를 백그라운드 탭으로 열어 "예상 배송일"을 읽어오는 오케스트레이터 (요청 형식 학습용 / 직접 호출 실패 시 대체)
 const waiters = new Map();   // tabId -> resolve
 const cancelled = new Set(); // listTabId
 const running = new Set();   // listTabId
@@ -46,18 +46,5 @@ async function runDetails(listTabId, windowId, origin, orderIds) {
   }
 }
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (!msg || !msg.type) return;
-  if (msg.type === 'fetchDetails' && sender.tab) {
-    let origin = 'https://www.aliexpress.com';
-    try { origin = new URL(sender.tab.url).origin; } catch (_) {}
-    runDetails(sender.tab.id, sender.tab.windowId, origin, msg.orderIds || []);
-    sendResponse({ ok: true });
-  } else if (msg.type === 'cancelDetails' && sender.tab) {
-    cancelled.add(sender.tab.id);
-    sendResponse({ ok: true });
-  } else if (msg.type === 'detailResult' && sender.tab) {
-    const w = waiters.get(sender.tab.id);
-    if (w) w(msg);
-  }
-});
+/** 탭에서 온 결과를 기다리는 쪽에 전달 */
+function resolveTabWaiter(tabId, msg) { const w = waiters.get(tabId); if (w) w(msg); }

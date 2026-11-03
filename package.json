@@ -1,0 +1,17 @@
+{
+  "name": "social-credit-stats",
+  "private": true,
+  "description": "알리 주문 통계 크롬 확장 + 중앙 서버",
+  "scripts": {
+    "test": "node --test tests/unit/*.test.cjs",
+    "test:server": "cd server && go vet ./... && go test -race ./...",
+    "test:e2e": "node tests/e2e/run.cjs",
+    "fixtures": "node tests/tools/sanitize.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "latestVersion": "2.0.0",
+  "flags": {
+    "disableFastList": false,
+    "disableFastDetail": false
+  },
+  "parser": {
+    "etaLabels": [],
+    "protectLabels": []
+  }
+}
