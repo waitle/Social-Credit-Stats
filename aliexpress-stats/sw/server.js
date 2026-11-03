@@ -1,11 +1,11 @@
-// 중앙 서버 연동 (사용자가 서버 주소를 설정한 경우만)
+// 중앙 서버 연동 (기본: AES.DEFAULT_SERVER, 설정 페이지에서 변경 가능)
 // - 원격 설정: 알리 문구/구조 변경에 대응하는 라벨 보강과 기능 플래그 (주문 데이터 전송 없음)
 // - 익명 상태 보고: 사용자가 켠 경우에만, 실패 사유 코드와 확장 버전만 전송
 'use strict';
 
 async function serverBase() {
   const { settings = {} } = await getStore('settings');
-  const url = (settings.server && settings.server.url) || '';
+  const url = (settings.server && settings.server.url) || AES.DEFAULT_SERVER;
   return /^https?:\/\//.test(url) ? url.replace(/\/+$/, '') : '';
 }
 

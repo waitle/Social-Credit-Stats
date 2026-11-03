@@ -5,7 +5,7 @@
 | 폴더 | 내용 |
 |---|---|
 | [`aliexpress-stats/`](aliexpress-stats/) | 크롬 확장 (Manifest V3) |
-| [`server/`](server/) | 중앙 서버 (Go 표준 라이브러리, 단일 바이너리) — 선택 사항 |
+| [`server/`](server/) | 중앙 서버 (Go 표준 라이브러리, 단일 바이너리). 확장의 기본 주소: `https://social-credit.comio.uk` |
 | [`installer/`](installer/) | 설치 프로그램 + 자동 업데이터 (Windows / macOS / Linux) |
 | [`tests/`](tests/) | 단위 테스트(정제된 실제 응답), E2E 테스트(Chromium), 테스트 데이터 정제 도구 |
 
@@ -38,7 +38,7 @@
 
 ## 개인정보
 
-주문 데이터는 브라우저(`chrome.storage.local`)에만 저장됩니다. 중앙 서버는 주문 데이터를 받지 않습니다. 자세한 내용은 [PRIVACY.md](PRIVACY.md)를 보세요.
+주문 데이터는 브라우저(`chrome.storage.local`)에만 저장됩니다. 중앙 서버(기본 `https://social-credit.comio.uk`)는 주문 데이터를 받지 않습니다. 원격 설정만 하루 한 번 받고, 익명 상태 보고는 사용자가 켠 경우에만, 암호화 백업은 사용할 때만 동작합니다. 자세한 내용은 [PRIVACY.md](PRIVACY.md)를 보세요.
 
 ## 개발
 

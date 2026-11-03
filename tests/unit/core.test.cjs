@@ -47,6 +47,10 @@ test('구매자 보호 기간: 날짜형, 남은 시간형', () => {
   assert.strictEqual(AES.pickProtection(['예상 배송일: 11월 18일'], ref), null);
 });
 
+test('기본 중앙 서버 주소', () => {
+  assert.strictEqual(AES.DEFAULT_SERVER, 'https://social-credit.comio.uk');
+});
+
 test('원격 설정으로 라벨 보강', () => {
   assert.strictEqual(AES.pickEta(['도착 보장 11월 22일'], ref), null);
   AES.applyRemoteConfig({ parser: { etaLabels: ['도착\\s*보장'] }, flags: { disableFastList: true } });

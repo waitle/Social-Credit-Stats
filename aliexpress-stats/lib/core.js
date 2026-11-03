@@ -196,6 +196,8 @@
 
   /** 중앙 서버 원격 설정으로 보강하는 라벨과 기능 플래그 (확장 재배포 없이 알리 문구 변경에 대응) */
   const EXTRA = { eta: [], protect: [], flags: {} };
+  /** 기본 중앙 서버 (설정 페이지에서 다른 주소로 바꿀 수 있다) */
+  const DEFAULT_SERVER = 'https://social-credit.comio.uk';
   function applyRemoteConfig(cfg) {
     const compile = (arr) => (Array.isArray(arr) ? arr : []).slice(0, 20).filter((x) => typeof x === 'string' && x.length <= 200)
       .map((x) => { try { return new RegExp(x, 'i'); } catch (_) { return null; } }).filter(Boolean);
@@ -303,6 +305,6 @@
   }
 
 
-  Object.assign(AES, { EXTRA, applyRemoteConfig, PROTECT_LABEL, pickProtection, pad, DAY, toISO, fromISO, MON, MONNUM, parseDates, currencyOf, parseAmount, MONEY_RE, findMoney, parseMoney, BUTTON_RE, classifyStatus, STATUS_LABEL, DATE_LABEL, TOTAL_LABEL, TOTAL_EXCLUDE, DISCOUNT_LABEL, DISCOUNT_EXCLUDE, ETA_LABEL, ETA_WEAK, ETA_EXCLUDE, pickEta, parseLines });
+  Object.assign(AES, { DEFAULT_SERVER, EXTRA, applyRemoteConfig, PROTECT_LABEL, pickProtection, pad, DAY, toISO, fromISO, MON, MONNUM, parseDates, currencyOf, parseAmount, MONEY_RE, findMoney, parseMoney, BUTTON_RE, classifyStatus, STATUS_LABEL, DATE_LABEL, TOTAL_LABEL, TOTAL_EXCLUDE, DISCOUNT_LABEL, DISCOUNT_EXCLUDE, ETA_LABEL, ETA_WEAK, ETA_EXCLUDE, pickEta, parseLines });
   if (typeof module !== 'undefined' && module.exports) module.exports = AES;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

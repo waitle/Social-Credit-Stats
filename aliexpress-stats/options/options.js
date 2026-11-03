@@ -5,7 +5,7 @@ const NOTIFY_DEFAULT = { delivered: true, eta: true, refund: true, protect: true
 
 async function getSettings() { return (await chrome.storage.local.get('settings')).settings || {}; }
 async function patchSettings(fn) { const s = await getSettings(); fn(s); await chrome.storage.local.set({ settings: s }); return s; }
-const serverUrl = (s) => ((s.server && s.server.url) || '').replace(/\/+$/, '');
+const serverUrl = (s) => ((s.server && s.server.url) || AES.DEFAULT_SERVER).replace(/\/+$/, '');
 
 async function init() {
   const s = await getSettings();
@@ -18,6 +18,7 @@ async function init() {
   $('updSrc').value = s.updateSource || '';
   $('updInfo').textContent = updateInfo ? `최신 ${updateInfo.latest} · ${updateInfo.available ? '업데이트 있음' : '최신 버전 사용 중'}` : '';
   $('srv').value = serverUrl(s);
+  $('srv').placeholder = AES.DEFAULT_SERVER;
   $('tel').checked = !!(s.server && s.server.telemetry);
 }
 
@@ -26,7 +27,7 @@ document.addEventListener('change', async (e) => {
   if (t.dataset.notify) await patchSettings((s) => { s.notify = Object.assign({}, NOTIFY_DEFAULT, s.notify || {}, { [t.dataset.notify]: t.checked }); });
   else if (t.id === 'bg') { await patchSettings((s) => { s.bgRefreshHours = Number(t.value) || 0; }); chrome.runtime.sendMessage({ type: 'rescheduleAlarms' }); }
   else if (t.id === 'updSrc') await patchSettings((s) => { s.updateSource = t.value.trim() || undefined; });
-  else if (t.id === 'srv') await patchSettings((s) => { s.server = Object.assign({}, s.server, { url: t.value.trim() }); });
+  else if (t.id === 'srv') await patchSettings((s) => { const v = t.value.trim(); s.server = Object.assign({}, s.server, { url: v && v !== AES.DEFAULT_SERVER ? v : undefined }); });
   else if (t.id === 'tel') await patchSettings((s) => { s.server = Object.assign({}, s.server, { telemetry: t.checked }); });
 });
 
