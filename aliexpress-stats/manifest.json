@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "알리 주문 통계",
+  "version": "1.10.0",
+  "description": "알리익스프레스 주문 내역 페이지에서 구매/할인/품목/배송 현황 통계를 보여줍니다.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.aliexpress.com/p/order/*",
+        "https://*.aliexpress.com/p/tracking/*",
+        "https://*.aliexpress.us/p/order/*",
+        "https://trade.aliexpress.com/*"
+      ],
+      "js": [
+        "injected.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://*.aliexpress.com/p/order/*",
+        "https://*.aliexpress.com/p/tracking/*",
+        "https://*.aliexpress.us/p/order/*",
+        "https://trade.aliexpress.com/*"
+      ],
+      "js": [
+        "parser.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
