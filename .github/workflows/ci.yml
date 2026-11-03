@@ -24,6 +24,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24'
+          cache: false   # 외부 의존성이 없어 go.sum 이 없다
       - run: test -z "$(gofmt -l server)"
       - run: npm run test:server
 
@@ -39,6 +40,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24'
+          cache: false   # 외부 의존성이 없어 go.sum 이 없다
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
