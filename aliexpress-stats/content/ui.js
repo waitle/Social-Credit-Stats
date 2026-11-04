@@ -124,7 +124,14 @@ function initUI() {
 }
 
 let renderQueued = false;
-function scheduleRender() { if (renderQueued) return; renderQueued = true; setTimeout(() => { renderQueued = false; render(); }, 250); }
+// 불러오는 동안 화면이 계속 다시 그려지는데, 드롭다운(<select>)이 열려 있을 때 요소를 갈아 끼우면 목록이 닫힌다.
+// 선택 칸에 포커스가 있는 동안에는 백그라운드 갱신을 미뤘다가 포커스가 빠지면 한 번에 반영한다.
+let renderDeferred = false;
+const selectFocused = () => !!(root && root.activeElement && root.activeElement.tagName === 'SELECT');
+function scheduleRender() {
+  if (renderQueued) return; renderQueued = true;
+  setTimeout(() => { renderQueued = false; render(); }, 250);
+}
 
 function barList(items, labelFn, valFn, fmt) {
   const max = Math.max(1, ...items.map(valFn));
@@ -251,7 +258,8 @@ function computeNow() {
   return AES.computeStats(state.orders, AES.statsOptions(state.settings, { since: cutoffOf(state.settings.period || '1w') }));
 }
 
-function render() {
+function render() { if (selectFocused()) { renderDeferred = true; return; } renderNow(); }
+function renderNow() {
   if (!panel) return;                              // 백그라운드 갱신 탭에는 패널이 없다
   const s = computeNow();
   state.stats = s;
@@ -316,44 +324,46 @@ function render() {
 }
 
 function bindEvents() {
+  root.addEventListener('focusout', () => { if (renderDeferred) { renderDeferred = false; scheduleRender(); } });
   root.addEventListener('click', (e) => {
     const t = e.target.closest('[data-act],[data-tab],[data-ship]'); if (!t) return;
-    if (t.dataset.tab) { state.tab = t.dataset.tab; render(); return; }
-    if (t.dataset.ship) { state.shipFilter = t.dataset.ship; render(); return; }
+    if (t.dataset.tab) { state.tab = t.dataset.tab; renderNow(); return; }
+    if (t.dataset.ship) { state.shipFilter = t.dataset.ship; renderNow(); return; }
     const act = t.dataset.act;
-    if (act === 'more') { state.moreOpen = !state.moreOpen; render(); }
-    else if (act === 'toggle') { state.open = !state.open; if (state.open) scanDom(); render(); }
+    if (act === 'more') { state.moreOpen = !state.moreOpen; renderNow(); }
+    else if (act === 'toggle') { state.open = !state.open; if (state.open) scanDom(); renderNow(); }
     else if (act === 'loadall') loadAll();
     else if (act === 'stop') { state.cancel = true; }
     else if (act === 'details') fetchDetails(true);
     else if (act === 'stopdetail') { state.cancelDetail = true; try { chrome.runtime.sendMessage({ type: 'cancelDetails' }); } catch (_) {} }
-    else if (act === 'rescan') { const n = scanDom(true); state.progress = `다시 읽음 (변경 ${n}건)`; render(); }
+    else if (act === 'rescan') { const n = scanDom(true); state.progress = `다시 읽음 (변경 ${n}건)`; renderNow(); }
     else if (act === 'csv') exportCsv();
     else if (act === 'backup') exportBackup();
     else if (act === 'restore') importBackup();
     else if (act === 'options') { try { chrome.runtime.sendMessage({ type: 'openOptions' }); } catch (_) {} }
     else if (act === 'debug') exportDebug();
-    else if (act === 'clear') { if (confirm('저장된 주문 통계 데이터를 모두 지울까요?')) { state.orders = {}; state.settings.coverage = null; state.knownAtStart = new Set(); store.clear(); state.progress = ''; scanDom(); render(); } }
+    else if (act === 'clear') { if (confirm('저장된 주문 통계 데이터를 모두 지울까요?')) { state.orders = {}; state.settings.coverage = null; state.knownAtStart = new Set(); store.clear(); state.progress = ''; scanDom(); renderNow(); } }
   });
   root.addEventListener('input', (e) => {
     const t = e.target;
-    if (t.dataset.input === 'filter') { state.filter = t.value; render(); }
+    if (t.tagName === 'SELECT') t.blur();           // 고른 뒤에는 포커스를 풀어야 이후 진행 표시 갱신이 멈추지 않는다
+    if (t.dataset.input === 'filter') { state.filter = t.value; renderNow(); }
     if (t.dataset.cat !== undefined) {
       const m = state.settings.catOverrides || (state.settings.catOverrides = {});
       if (t.value) m[t.dataset.cat] = t.value; else delete m[t.dataset.cat];
-      store.save(); render(); return;
+      store.save(); renderNow(); return;
     }
     if (t.dataset.input === 'ship') { state.settings.includeShipping = !!t.checked; store.save(); }
     if (t.dataset.input === 'period') {
       const nk = t.value, prevK = state.settings.period || '1w';
       if (nk === prevK) return;
-      if (needsConfirm(nk) && !confirmHeavy(periodInfo(nk)[1])) { render(); return; }     // 거절하면 기존 기간 유지
-      state.settings.period = nk; store.save(); render();
+      if (needsConfirm(nk) && !confirmHeavy(periodInfo(nk)[1])) { renderNow(); return; }     // 거절하면 기존 기간 유지
+      state.settings.period = nk; store.save(); renderNow();
       if (!coversCutoff(cutoffOf(nk))) loadAll({ confirmed: true });                      // 저장된 범위를 넘으면 추가분만 불러오기
       return;
     }
     if (t.dataset.input === 'auto') { state.settings.auto = !!t.checked; store.save(); }
-    if (t.dataset.input === 'thumbs') { state.settings.thumbs = !!t.checked; store.save(); render(); }
+    if (t.dataset.input === 'thumbs') { state.settings.thumbs = !!t.checked; store.save(); renderNow(); }
   });
   // 숫자 설정(환율, 관세 한도, 보호 기간 경고)은 입력하는 도중에는 반영하지 않고, 입력을 마쳤을 때(Enter/포커스 이동)만 범위를 확인해 저장한다.
   // 글자마다 저장하면 중간 값(1, 14, 140…)으로 경고가 계산돼 알림이 쏟아진다.
@@ -361,7 +371,7 @@ function bindEvents() {
     const t = e.target, k = t.dataset && t.dataset.input;
     if (k !== 'fx' && k !== 'customs' && k !== 'protectDays') return;
     const raw = String(t.value).trim(), v = parseFloat(raw);
-    const reject = (msg) => { t.blur(); state.progress = msg; render(); };
+    const reject = (msg) => { t.blur(); state.progress = msg; renderNow(); };
     if (k === 'fx') {
       if (raw === '') state.settings.usdRate = null;
       else if (!(v >= 300 && v <= 5000)) return reject('환율은 300~5000 사이로 입력하세요');
@@ -374,7 +384,7 @@ function bindEvents() {
       if (!(d >= 1 && d <= 60)) return reject('보호 기간 경고는 1~60일 사이로 입력하세요');
       state.settings.protectDays = d;
     }
-    store.save(); render();
+    store.save(); renderNow();
   });
 }
 

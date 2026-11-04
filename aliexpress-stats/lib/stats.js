@@ -24,6 +24,14 @@
     ['유아·아동', /baby|아기|유아|\bkids?\b|아동|어린이|toddler|children/i]
   ];
 
+  /** 항공권·승차권·입장권 같은 티켓류: 실물 배송이 없으므로 배송 현황에서 뺀다 (구매·지출 통계에는 그대로 포함) */
+  const TICKET_RE = /항공권|항공편|비행기\s*표|탑승권|기차표|열차표|승차권|버스표|입장권|전자\s*티켓|e-?ticket|air\s*ticket|flight|airfare|airline|boarding\s*pass|티켓|\bticket/i;
+  const TICKET_ACCESSORY_RE = /홀더|케이스|커버|스티커|클립|지갑|파일|holder|case|cover|sticker|clip|wallet|pouch|organizer|printer|프린터|용지|paper|roll|롤/i;
+  function isTicket(title) {
+    const t = String(title || '');
+    return TICKET_RE.test(t) && !TICKET_ACCESSORY_RE.test(t);
+  }
+
   function categorize(title) {
     const t = String(title || '');
     for (const [name, re] of CATEGORIES) if (re.test(t)) return name;
@@ -168,6 +176,7 @@
       if (o.cls !== 'pending_ship' && o.cls !== 'shipping') continue;
       const items = o.items && o.items.length ? o.items : [{ title: '(상품명 확인 불가)', qty: 1 }];
       for (const it of items) {
+        if (isTicket(it.title)) continue;
         const e = it.eta || o.eta;
         const start = e ? fromISO(e.start) : null;
         const end = e ? fromISO(e.end) : null;
@@ -190,7 +199,7 @@
     for (const o of all) {
       if (o.cls !== 'delivered') continue;
       const items = o.items && o.items.length ? o.items : [{ title: '(상품명 확인 불가)', qty: 1 }];
-      for (const it of items) delivered.push({ orderId: o.id, title: it.title, qty: it.qty || 1, image: it.image || '', url: it.url || '', status: 'delivered', orderDate: o.date, deliveredAt: o.deliveredAt || null, track: o.track || null });
+      for (const it of items) if (!isTicket(it.title)) delivered.push({ orderId: o.id, title: it.title, qty: it.qty || 1, image: it.image || '', url: it.url || '', status: 'delivered', orderDate: o.date, deliveredAt: o.deliveredAt || null, track: o.track || null });
     }
     delivered.sort((a, b) => ((b.orderDate || '') > (a.orderDate || '') ? 1 : (b.orderDate || '') < (a.orderDate || '') ? -1 : 0));
 
@@ -313,6 +322,6 @@
     }, extra || {});
   }
 
-  Object.assign(AES, { statsOptions, CATEGORIES, categorize, STOP, topKeywords, addTo, normTitle, median, primaryCurrency, estimateRates, computeStats });
+  Object.assign(AES, { statsOptions, CATEGORIES, categorize, isTicket, STOP, topKeywords, addTo, normTitle, median, primaryCurrency, estimateRates, computeStats });
   if (typeof module !== 'undefined' && module.exports) module.exports = AES;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

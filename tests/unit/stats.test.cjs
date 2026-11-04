@@ -63,3 +63,19 @@ test('분류 직접 수정이 통계에 반영', () => {
   assert.deepStrictEqual(s.categories.map((c) => c.name), ['반려동물']);
   assert.strictEqual(s.purchases[0].catEdited, true);
 });
+
+test('티켓류는 배송 현황(진행 중/완료)에서 제외하되 구매 통계에는 남는다', () => {
+  const it = (id, title) => ({ id, title, qty: 1 });
+  const map = {
+    a: { id: 'a', status: 'shipping', date: '2026-10-30', total: { amount: 300000, currency: 'KRW' }, items: [it('a1', '인천-도쿄 왕복 항공권 e-ticket')] },
+    b: { id: 'b', status: 'delivered', date: '2026-10-20', total: { amount: 50000, currency: 'KRW' }, items: [it('b1', '놀이공원 입장권 2매')] },
+    c: { id: 'c', status: 'shipping', date: '2026-10-30', total: { amount: 9000, currency: 'KRW' }, items: [it('c1', 'USB 케이블'), it('c2', 'Flight ticket booking service')] },
+    d: { id: 'd', status: 'shipping', date: '2026-10-30', total: { amount: 5000, currency: 'KRW' }, items: [it('d1', '티켓 홀더 여권 케이스')] }
+  };
+  const s = AES.computeStats(map, { now });
+  assert.deepStrictEqual(s.inProgress.map((r) => r.title).sort(), ['USB 케이블', '티켓 홀더 여권 케이스']);   // 액세서리는 제외하지 않음
+  assert.strictEqual(s.delivered.length, 0);
+  assert.strictEqual(s.inProgressItems, 2);
+  assert.strictEqual(s.orderCount, 4);                                                                    // 지출 통계에는 포함
+  assert.ok(AES.isTicket('Airline boarding pass') && AES.isTicket('항공권 예약') && !AES.isTicket('USB 케이블'));
+});

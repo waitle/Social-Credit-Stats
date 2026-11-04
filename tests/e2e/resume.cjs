@@ -159,6 +159,23 @@ const open = async (ctx) => {
     await ctx.close();
   });
 
+  await step('불러오는 동안 기간 드롭다운에 포커스가 있으면 화면을 갈아 끼우지 않는다 (열린 목록이 닫히지 않음)', async () => {
+    reset(); ctl.delayMs = 1800;
+    const ctx = await fresh('p5b'); const page = await open(ctx);
+    const sel = () => page.evaluate(() => document.getElementById('aes-host').shadowRoot.querySelector('[data-input="period"]') !== null);
+    const spinning = () => page.evaluate(() => !!document.getElementById('aes-host').shadowRoot.querySelector('.tools .spin')).catch(() => false);
+    for (let i = 0; i < 80 && !((await sel().catch(() => false)) && (await spinning())); i++) await page.waitForTimeout(100);
+    await page.evaluate(() => { const r = document.getElementById('aes-host').shadowRoot; const el = r.querySelector('[data-input="period"]'); window.__sel = el; el.focus(); });
+    assert.ok(await page.evaluate(() => !!document.getElementById('aes-host').shadowRoot.querySelector('.tools .spin')), '아직 불러오는 중이어야 함: ' + (await panelText(page)).slice(-200));
+    await page.waitForTimeout(1500);                                      // 이 사이 진행 갱신이 여러 번 일어난다
+    const same = await page.evaluate(() => { const r = document.getElementById('aes-host').shadowRoot; return r.querySelector('[data-input="period"]') === window.__sel && r.activeElement === window.__sel; });
+    assert.ok(same, '드롭다운 요소가 그대로이고 포커스가 유지돼야 함: ' + JSON.stringify(await page.evaluate(() => { const r = document.getElementById('aes-host').shadowRoot; return { sameEl: r.querySelector('[data-input="period"]') === window.__sel, active: r.activeElement && r.activeElement.tagName, spin: !!r.querySelector('.tools .spin') }; })));
+    await page.evaluate(() => document.getElementById('aes-host').shadowRoot.querySelector('[data-input="period"]').blur());
+    await waitIdle(page);                                                  // 포커스가 빠지면 밀린 갱신이 반영된다
+    assert.match(await panelText(page), /저장됨|완료/);
+    await ctx.close();
+  });
+
   await step('환율/관세 한도를 입력하는 동안 알림이 쏟아지지 않는다', async () => {
     reset();
     const ctx = await fresh('p6', { period: '1w' }); const page = await open(ctx);
