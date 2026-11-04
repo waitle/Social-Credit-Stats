@@ -21,7 +21,7 @@ async function replayDetail(tpls, fromId, toId) {
     let opts;
     try { opts = { ...t.opts, data: strToData(t.opts.data, dataStr) }; } catch (_) { return { ok: false, why: 'data-parse' }; }
     const r = await libCall(opts);
-    if (!r.ok || !isOk(r.json)) return { ok: false, why: errText(r) };
+    if (!r.ok || !isOk(r.json)) { const why = errText(r); return { ok: false, why, captcha: AES.isCaptcha(why + ' ' + JSON.stringify((r.json && r.json.data) || '').slice(0, 300)) || why === 'timeout' }; }
     caps.push({ url: 'lib:' + t.api, text: JSON.stringify(r.json) });
   }
   return { ok: true, res: AES.extractDetail(toId, [], caps, { ref: new Date() }) };
@@ -64,16 +64,21 @@ async function fetchDetailsOnce(force) {
       } else state.fast.detail = cand ? 'fail:no-eta' : 'fail:no-template';
     } else state.fast.detail = 'saved';
 
-    let failed = [];
+    let failed = [], sawCaptcha = false;
     if (tpl && ids.length) {
       await pool(ids, 6, async (id) => {
         let r = null;
         try { r = await replayDetail(tpl.tpls, tpl.orderId, id); } catch (_) {}
+        if (r && !r.ok && r.captcha && !state.cancelDetail) {                       // 보안 인증이면 기다렸다가 다시 (탭으로 넘기지 않는다)
+          sawCaptcha = true;
+          const w = await waitCaptcha(async () => { const x = await replayDetail(tpl.tpls, tpl.orderId, id); return x.ok ? { json: x, ok: true } : x; }, 'detail');
+          r = w.json || (w.ok ? w : r);
+        }
         if (r && r.ok) { applyDetail(id, r.res); bump(); } else failed.push(id);
       });
-      if (failed.length === ids.length) { state.settings.detailTpl = null; store.save(); state.fast.detail += ' → 직접 호출 실패, 탭으로 전환'; }
+      if (failed.length === ids.length && !sawCaptcha) { state.settings.detailTpl = null; store.save(); state.fast.detail += ' → 직접 호출 실패, 탭으로 전환'; }
     } else failed = ids;
-    if (failed.length && !state.cancelDetail) {
+    if (failed.length && !state.cancelDetail && !sawCaptcha) {      // 보안 인증 때문에 못 받은 주문은 탭으로 넘기지 않고 다음 갱신 때 다시 받는다
       state.detail.base = state.detail.done;
       await tabFetch(failed);
     }

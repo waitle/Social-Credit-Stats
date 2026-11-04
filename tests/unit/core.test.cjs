@@ -47,6 +47,15 @@ test('구매자 보호 기간: 날짜형, 남은 시간형', () => {
   assert.strictEqual(AES.pickProtection(['예상 배송일: 11월 18일'], ref), null);
 });
 
+test('보안 인증(캡차) 응답 판별', () => {
+  assert.strictEqual(AES.isCaptcha('FAIL_SYS_USER_VALIDATE::验证'), true);
+  assert.strictEqual(AES.isCaptcha('RGV587_ERROR::SM::哎哟喂,被挤爆啦'), true);
+  assert.strictEqual(AES.isCaptcha('{"url":"https://acs.aliexpress.com/punish?x5secdata=abc"}'), true);
+  assert.strictEqual(AES.isCaptcha('FAIL_SYS_TOKEN_EMPTY::token empty'), false);
+  assert.strictEqual(AES.isCaptcha('SUCCESS::调用成功'), false);
+  assert.strictEqual(AES.isCaptcha(''), false);
+});
+
 test('기본 중앙 서버 주소', () => {
   assert.strictEqual(AES.DEFAULT_SERVER, 'https://social-credit.156048.xyz');
 });

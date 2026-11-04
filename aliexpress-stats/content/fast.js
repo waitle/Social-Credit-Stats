@@ -55,47 +55,135 @@ const bumpPage = (data) => data.replace(/(pageIndex\\*"\s*:\s*\\*"?)(\d+)/g, (m,
 const listReqs = () => state.reqLog.filter((r) => /order\.list/i.test(r.api));
 const orderIdsOf = (json) => { try { return AES.extractFromJson(json, { ref: new Date() }).map((o) => o.id); } catch (_) { return []; } };
 
-/** 화면 조작/이미지 로딩 없이 다음 페이지들을 페이지 자신의 mtop 클라이언트로 직접 요청. 성공 시 'done', 실패 시 사유 문자열 */
+/** 알리 보안 확인(캡차) 창이 화면에 떠 있는가 (baxia/nocaptcha 계열 요소, 정확한 이름은 확인되지 않아 여러 후보를 본다) */
+const captchaVisible = () => !!document.querySelector('#baxia-dialog-content, .baxia-dialog, #nocaptcha, .nc-container, iframe[src*="punish"], iframe[src*="captcha"], [id^="sufei-dialog"]');
+
+/** 보안 인증 대기: 사용자가 인증을 마칠 때까지 간격을 늘려 가며 같은 요청을 다시 시도. again() → {json} | {why, captcha} */
+async function waitCaptcha(again, label) {
+  const poll = state.settings.captchaPollMs || null;                       // 테스트용으로 줄일 수 있음
+  const limit = state.settings.captchaTimeoutMs || 5 * 60 * 1000;
+  const steps = poll ? [poll] : [3000, 3000, 5000, 5000, 10000, 10000, 15000, 20000];
+  const t0 = Date.now();
+  state.paused = { kind: 'captcha', since: t0 };
+  try {
+    for (let k = 0; Date.now() - t0 < limit && !state.cancel; k++) {
+      const left = Math.max(0, Math.round((limit - (Date.now() - t0)) / 1000));
+      state.progress = `보안 인증이 필요합니다 — 알리 페이지에서 인증을 완료하면 자동으로 이어집니다 (${left}초)`;
+      scheduleRender();
+      await sleep(captchaVisible() ? Math.min(1500, steps[0]) : steps[Math.min(k, steps.length - 1)]);
+      if (captchaVisible()) continue;                                      // 인증 창이 떠 있는 동안은 요청을 보내지 않는다
+      const r = await again();
+      if (r.json || r.ok) return r;
+      if (!r.captcha) return r;                                            // 다른 종류의 실패로 바뀌었으면 호출한 쪽이 판단
+    }
+  } finally { state.paused = null; }
+  return { why: 'captcha-timeout', captcha: true };
+}
+
+/** 화면 조작/이미지 로딩 없이 다음 페이지들을 페이지 자신의 mtop 클라이언트로 직접 요청.
+ *  반환: 'done' | 'cancel' | 'paused:사유'(이미 받은 것을 유지한 채 멈춤, 이어서 불러오기 가능) | 'fail:사유'(처음부터 안 됨 → 화면 방식으로 전환) */
 async function loadAllFast() {
   if (!(state.meta && state.meta.hasMore)) return 'done';
   if (AES.EXTRA.flags.disableFastList) return 'fail:disabled-by-config';
+  state.endReason = '';
   const early0 = shouldStop(state.lastPageOrders);               // 첫 페이지만으로 충분하면 추가 요청 없이 종료
   if (early0) { state.endReason = early0; return 'done'; }
   await refreshLibInfo();
   if (!state.libInfo || !state.libInfo.hooked) return 'fail:no-lib(' + (state.libInfo ? `lib=${state.libInfo.hasLib} mtop=${state.libInfo.hasMtop} request=${state.libInfo.requestType}` : 'noinfo') + ')';
 
-  // 요청 1회 + 새 주문 확인. 성공하면 응답 JSON, 실패하면 null
+  /** 요청 1회 + 새 주문 확인 → { json, os } | { why, captcha } */
   async function callList(opts) {
     const known = new Set(state.sessionIds);          // 이번 접속에서 목록 응답으로 받은 주문 (저장소의 이전 데이터와 무관하게 판단)
     const r = await libCall(opts);
-    if (!r.ok || !isOk(r.json)) { state.fast.listWhy = 'api:' + errText(r); return null; }
+    if (!r.ok || !isOk(r.json)) {
+      const why = errText(r);
+      const detail = why + ' ' + JSON.stringify((r.json && (r.json.data || r.json.ret)) || '').slice(0, 300);
+      state.fast.listWhy = 'api:' + why;
+      return { why: 'api:' + why, captcha: AES.isCaptcha(detail) || why === 'timeout' };   // 시간 초과도 인증 창이 응답을 붙잡고 있는 경우가 많다
+    }
     const os = hookOrders(r.json);
-    if (!os.some((o) => !known.has(o.id))) { state.fast.listWhy = 'norepeat'; return null; }
-    return r.json;
+    if (!os.some((o) => !known.has(o.id))) { state.fast.listWhy = 'norepeat'; return { why: 'norepeat' }; }
+    return { json: r.json, os };
   }
 
-  let tpl = null, dataCur = '', prev = null, cur = null, learnPrevTokens = null, saveAfter = false;
-  state.endReason = '';
-  const early = shouldStop(state.lastPageOrders);               // 첫 페이지만으로 충분하면 추가 요청 없이 종료
-  if (early) { state.endReason = early; return 'done'; }
+  /** 일시 오류는 몇 번 다시 시도하고, 보안 인증이면 끝날 때까지 기다린다 */
+  async function fetchPage(opts) {
+    if (captchaVisible()) { const w = await waitCaptcha(async () => ({ ok: true }), 'list'); if (w.why) return w; }
+    let r = await callList(opts);
+    for (let k = 0; !r.json && !r.captcha && r.why !== 'norepeat' && k < 2 && !state.cancel; k++) { await sleep(1500 * (k + 1)); r = await callList(opts); }
+    if (!r.json && r.captcha && !state.cancel) r = await waitCaptcha(() => callList(opts), 'list');
+    return r;
+  }
 
-  // (0) 같은 접속에서 이전에 이어받던 체인이 있으면 이어서 계속 (기간을 늘렸을 때)
-  if (state.chain && state.meta.hasMore) ({ tpl, dataCur, prev, cur } = state.chain);
+  const mkChain = (tpl, dataCur, prev, cur) => ({ tpl, dataCur, prevT: tokensOf(prev), curT: tokensOf(cur) });
+  let chain = null, progressed = false, learned = null, resumed = false;
+  const fail = (why) => (progressed || resumed || state.chain ? 'paused:' + why : 'fail:' + why);
+
+  /** 체인의 다음 페이지 1개 요청 → { json, os, dataNext } | { why, captcha } */
+  async function step(use) {
+    const dataNext = bumpPage(replaceTokens(use.dataCur, use.prevT, use.curT));
+    let opts;
+    try { opts = { ...use.tpl, data: strToData(use.tpl.data, dataNext) }; } catch (e) { return { why: 'data-parse' }; }
+    const r = await fetchPage(opts);
+    return r.json ? { ...r, dataNext } : r;
+  }
+  /** 받은 페이지를 상태에 반영하고 새 체인을 돌려준다 */
+  function advance(use, r) {
+    state.lastPageOrders = r.os; progressed = true;
+    const next = { tpl: use.tpl, dataCur: r.dataNext, prevT: use.curT, curT: tokensOf(r.json) };
+    state.chain = next;
+    afterPage(next, r.os);
+    state.progress = `목록 불러오는 중(빠른 모드)… ${Object.keys(state.orders).length}건`;
+    scheduleRender();
+    fetchDetails(false);                          // 새로 발견된 배송 대기·진행 주문의 예상 배송일 조회를 목록 로딩과 동시에 진행
+    return next;
+  }
+
+  // 저장된 이어받기 지점(중단/인증 대기/기간 확장)으로 건너뛸 수 있는가:
+  // 기간을 넓혀 더 오래된 내역이 필요하고, 새 주문을 모두 받았고(= 지금 페이지가 이미 아는 주문뿐), 저장 지점이 더 뒤에 있을 때
+  let jumpTried = false;
+  const resumePoint = () => { const rs = state.settings.resume; return rs && rs.tpl && rs.dataCur && rs.prevT && rs.curT ? rs : null; };
+  const canJump = () => {
+    const rs = resumePoint(); if (!rs || jumpTried) return false;
+    if (state.cut.covered) return false;           // 저장된 범위 안(추가분 확인)에서는 건너뛰지 않는다: 사이에 있는 배송 중 주문의 상태도 갱신해야 하고, 더 오래된 내역은 필요 없다
+    const pg = state.lastPageOrders || [];
+    return pg.length > 0 && pg.every((o) => state.knownAtStart.has(o.id)) && rs.pageNo > (state.meta.pageIndex || 0);
+  };
+  const useOfResume = () => { const rs = resumePoint(); return { tpl: rs.tpl, dataCur: rs.dataCur, prevT: rs.prevT, curT: rs.curT }; };
+
+  // (0) 같은 접속에서 이전에 이어받던 체인이 있으면 그대로 이어서 (기간을 늘렸거나 중단했다가 다시 시작)
+  if (state.chain && state.meta.hasMore) chain = state.chain;
+
+  // (0b) 이전 접속에서 중단된 지점이 저장돼 있으면 처음부터 다시 훑지 않고 그 지점부터 이어서
+  if (!chain && canJump()) {
+    jumpTried = true; resumed = true;
+    const use = useOfResume();
+    const r = await step(use);
+    if (r.json) {
+      state.fast.resumeJump = 'ok(p' + state.meta.pageIndex + ')';
+      chain = advance(use, r);
+      const w = shouldStop(state.lastPageOrders);
+      if (w) { state.endReason = w; return 'done'; }
+    } else if (state.cancel) return 'cancel';
+    else if (r.captcha) return fail(r.why);                       // 인증이 필요한 것이지 지점이 틀린 게 아님 → 지점 유지
+    else { state.settings.resume = null; store.save(); state.fast.resumeJump = 'failed(' + r.why + ')'; resumed = false; }   // 토큰이 만료됐으면 버리고 처음부터
+  }
 
   // (1) 저장된 요청 형식이 있으면 "주문 더 보기" 클릭 없이 바로 2페이지 요청 (1페이지 응답의 토큰으로 갱신)
   const saved = state.settings.listTpl;
-  if (!tpl && saved && saved.opts && saved.prevTokens && state.meta.pageIndex <= 1 && state.listResps.length) {
+  if (!chain && saved && saved.opts && saved.prevTokens && state.meta.pageIndex <= 1 && state.listResps.length) {
     const first = state.listResps[state.listResps.length - 1];
     const dataFirst = replaceTokens(dataToStr(saved.opts.data), saved.prevTokens, tokensOf(first));
-    let json = null;
-    try { json = await callList({ ...saved.opts, data: strToData(saved.opts.data, dataFirst) }); } catch (_) {}
-    if (json) { tpl = saved.opts; dataCur = dataFirst; prev = first; cur = json; state.fast.listTpl = 'saved'; state.lastPageOrders = hookOrders(json); }
-    else { state.settings.listTpl = null; store.save(); state.fast.listTpl = 'saved-failed(' + state.fast.listWhy + ')'; }
-    if (json) { const w = shouldStop(state.lastPageOrders); if (w) { state.endReason = w; state.chain = { tpl, dataCur, prev, cur }; return 'done'; } }
+    let r = { why: 'exception' };
+    try { r = await fetchPage({ ...saved.opts, data: strToData(saved.opts.data, dataFirst) }); } catch (_) {}
+    if (r.json) { chain = mkChain(saved.opts, dataFirst, first, r.json); state.fast.listTpl = 'saved'; state.lastPageOrders = r.os; progressed = true; afterPage(chain, r.os); }
+    else if (r.captcha || state.cancel) return state.cancel ? 'cancel' : fail(r.why);          // 템플릿이 틀린 게 아니라 인증이 필요한 것 → 템플릿 유지
+    else { state.settings.listTpl = null; store.save(); state.fast.listTpl = 'saved-failed(' + r.why + ')'; }
+    if (r.json) { const w = shouldStop(state.lastPageOrders); if (w) { state.endReason = w; state.chain = chain; return 'done'; } }
   }
 
   // (2) 없으면 "주문 더 보기"를 딱 한 번만 눌러 2페이지 요청 형식을 학습
-  if (!tpl) {
+  if (!chain) {
     let reqs = listReqs();
     if (reqs.length < 2) {
       const before = reqs.length;
@@ -110,33 +198,45 @@ async function loadAllFast() {
       if (reqs.length <= before) return 'fail:learn(요청 ' + reqs.length + '개)';
     }
     if (state.listResps.length < 2) return 'fail:resps';
-    tpl = reqs[reqs.length - 1].opts;
-    dataCur = dataToStr(tpl.data);
-    prev = state.listResps[state.listResps.length - 2]; cur = state.listResps[state.listResps.length - 1];
-    learnPrevTokens = tokensOf(prev); saveAfter = true; state.fast.listTpl = 'learned';
-    state.settings.listTpl = { opts: tpl, prevTokens: learnPrevTokens }; store.save();   // 바로 저장 (다음 접속에서 실패하면 자동으로 지우고 재학습)
+    const tpl = reqs[reqs.length - 1].opts;
+    const prev = state.listResps[state.listResps.length - 2], cur = state.listResps[state.listResps.length - 1];
+    chain = mkChain(tpl, dataToStr(tpl.data), prev, cur);
+    learned = { opts: tpl, prevTokens: tokensOf(prev) }; state.fast.listTpl = 'learned';
+    state.settings.listTpl = learned; store.save();   // 바로 저장 (다음 접속에서 실패하면 자동으로 지우고 재학습)
+    progressed = true; afterPage(chain, state.lastPageOrders);
     const w = shouldStop(state.lastPageOrders);
-    if (w) { state.endReason = w; state.chain = { tpl, dataCur, prev, cur }; return 'done'; }
+    if (w) { state.endReason = w; state.chain = chain; return 'done'; }
   }
 
   // (3) 나머지 페이지: 응답마다 토큰을 갱신하며 이어서 요청 (기간/저장된 범위에 도달하면 중단)
-  for (let i = 0; i < 500 && state.meta.hasMore && !state.cancel; i++) {
-    const dataNext = bumpPage(replaceTokens(dataCur, tokensOf(prev), tokensOf(cur)));
-    let optsNext;
-    try { optsNext = { ...tpl, data: strToData(tpl.data, dataNext) }; } catch (e) { return 'fail:data-parse'; }
-    const json = await callList(optsNext);
-    if (!json) return 'fail:' + state.fast.listWhy;
-    state.lastPageOrders = hookOrders(json);
-    if (saveAfter) { state.settings.listTpl = { opts: tpl, prevTokens: learnPrevTokens }; store.save(); saveAfter = false; }  // 한 번 검증된 형식만 저장
-    prev = cur; cur = json; dataCur = dataNext;
-    state.chain = { tpl, dataCur, prev, cur };
-    state.progress = `목록 불러오는 중(빠른 모드)… ${Object.keys(state.orders).length}건`;
-    scheduleRender();
-    fetchDetails(false);                          // 새로 발견된 배송 대기·진행 주문의 예상 배송일 조회를 목록 로딩과 동시에 진행
+  for (let i = 0; i < 800 && state.meta.hasMore && !state.cancel; i++) {
+    let use = chain, jumping = false;
+    if (canJump()) { jumpTried = true; use = useOfResume(); jumping = true; }   // 새 주문을 다 받아 아는 페이지에 닿았으면 저장 지점으로 건너뜀
+    const r = await step(use);
+    if (!r.json) {
+      if (state.cancel) return 'cancel';
+      if (jumping && !r.captcha) { state.settings.resume = null; store.save(); state.fast.resumeJump = 'failed(' + r.why + ')'; continue; }   // 저장 지점이 만료됐으면 버리고 차례대로 계속
+      return fail(r.why);
+    }
+    if (jumping) state.fast.resumeJump = 'ok(p' + state.meta.pageIndex + ')';
+    chain = advance(use, r);
+    if (learned) { state.settings.listTpl = learned; learned = null; }
     const why = shouldStop(state.lastPageOrders);
     if (why) { state.endReason = why; return 'done'; }
   }
   return state.cancel ? 'cancel' : 'done';
+}
+
+/** 페이지를 하나 받을 때마다: 이어받기 지점 저장 + 저장 범위(coverage)를 그만큼 넓힘.
+ *  최신 주문부터 차례로 받았으므로 "이 페이지의 가장 오래된 날짜 이후"는 모두 받은 상태다. */
+function afterPage(chain, pageOrders) {
+  state.chain = chain;
+  if (state.meta && state.meta.hasMore === false) { state.settings.resume = null; store.save(); return; }
+  const dates = (pageOrders || []).map((o) => (o.date || '').slice(0, 10)).filter(Boolean).sort();
+  const oldest = dates[0] || null;
+  state.settings.resume = { tpl: chain.tpl, dataCur: chain.dataCur, prevT: chain.prevT, curT: chain.curT, pageNo: state.meta ? state.meta.pageIndex || 0 : 0, oldest, at: Date.now() };
+  if (oldest) mergeCoverage(addDaysISO(oldest, 1));
+  store.save();
 }
 
 /* ---------------------------- "주문 더 보기" 반복 클릭 (느린 방식, 빠른 방식 실패 시 대체) ---------------------------- */
@@ -169,16 +269,20 @@ async function loadAll(opts = {}) {
   const info = periodInfo(key), cutoff = cutoffOf(key), covered = coversCutoff(cutoff);
   state.cut = { cutoff, covered };
   state.loading = true; state.cancel = false; state.endReason = '';
-  state.progress = covered ? `${info[1]} · 저장된 내역 이후 추가분 확인 중…` : `${info[1]} 주문 목록 불러오는 중…`; render();
+  const rs = state.settings.resume;
+  state.progress = covered ? `${info[1]} · 저장된 내역 이후 추가분 확인 중…` : rs && rs.oldest ? `${info[1]} 주문 목록 이어서 불러오는 중… (${rs.oldest} 이전부터)` : `${info[1]} 주문 목록 불러오는 중…`; render();
   for (let i = 0; i < 30 && !state.counts; i++) await sleep(50);   // 배송 중 주문 수(알리 집계)가 필요한 판단이 있어 잠깐 대기
   let stall = 0, why = '완료';
   let fastRes = 'skip';
   try { fastRes = await loadAllFast(); } catch (e) { fastRes = 'fail:exception ' + e.message; }
   state.fast.list = fastRes;
-  noteHealth('list', { code: fastRes });
+  const paused = /^paused:/.test(fastRes);
+  if (!paused && fastRes !== 'cancel') noteHealth('list', { code: fastRes });
   if (fastRes === 'done') why = '완료(빠른 모드)';
+  else if (paused) why = '일시정지';
   else if (fastRes !== 'cancel') { state.progress = `빠른 모드 실패(${fastRes}) → 화면 방식으로 전환`; render(); }
-  for (let i = 0; i < 400 && !state.cancel && fastRes !== 'done' && fastRes !== 'cancel'; i++) {
+  // 빠른 모드로 이미 받던 중이면 화면 방식으로 바꾸지 않는다 (같은 페이지를 처음부터 다시 훑게 되므로). 이어서 불러오기로 계속한다.
+  for (let i = 0; i < 400 && !state.cancel && fastRes !== 'done' && fastRes !== 'cancel' && !paused; i++) {
     if (state.meta && state.meta.hasMore === false) break;                  // 마지막 페이지까지 로드됨
     const stop = shouldStop(state.lastPageOrders);
     if (stop) { state.endReason = stop; break; }
@@ -203,12 +307,18 @@ async function loadAll(opts = {}) {
     render();
     if (n === beforeN && state.listAt === beforeAt) { if (++stall >= 3) { why = '더 이상 새 주문이 로드되지 않아 중단'; break; } } else stall = 0;
   }
-  state.loading = false;
-  if (fastRes !== 'done') window.scrollTo(0, 0);
-  const finishedOk = !state.cancel && (fastRes === 'done' || why === '완료' || (state.meta && state.meta.hasMore === false) || state.endReason);
+  state.loading = false; state.paused = null;
+  if (fastRes !== 'done' && !paused) window.scrollTo(0, 0);
+  const finishedOk = !state.cancel && !paused && (fastRes === 'done' || why === '완료' || (state.meta && state.meta.hasMore === false) || state.endReason);
   if (finishedOk) updateCoverage(state.endReason);
   store.flush();
-  state.progress = state.cancel ? '중단됨' : `${info[1]} ${state.endReason === 'incremental' ? '추가분 확인' : '목록'} ${why} · 총 ${Object.keys(state.orders).length}건 저장됨`;
+  const nSaved = Object.keys(state.orders).length, r2 = state.settings.resume;
+  if (paused) {
+    const reason = /captcha/i.test(fastRes) ? '보안 인증이 필요합니다. 알리 페이지에서 인증을 완료한 뒤 "이어서 불러오기"를 누르세요' : `오류로 멈췄습니다 (${fastRes.slice(7, 70)}). "이어서 불러오기"로 다시 시도하세요`;
+    state.progress = `${reason} · ${nSaved}건 저장됨${r2 && r2.oldest ? `, ${r2.oldest}까지` : ''}`;
+  } else if (state.cancel) {
+    state.progress = `중단됨 · ${nSaved}건 저장됨${r2 && r2.oldest ? `, ${r2.oldest}까지` : ''} — "이어서 불러오기"로 계속할 수 있습니다`;
+  } else state.progress = `${info[1]} ${state.endReason === 'incremental' ? '추가분 확인' : '목록'} ${why} · 총 ${nSaved}건 저장됨`;
   render();
   if (!state.cancel) fetchDetails(false);
 }

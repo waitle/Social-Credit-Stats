@@ -9,11 +9,11 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
 const NOISE_URL = /recommend|cart\.count|cookie\.render/i;
 
 const state = {
-  orders: {}, settings: { usdRate: null, thumbs: true, detailTpl: null, auto: true, period: '1w', includeShipping: true, coverage: null, listTpl: null, customsLimit: 150, protectDays: 7, catOverrides: {} },
+  orders: {}, settings: { usdRate: null, thumbs: true, detailTpl: null, auto: true, period: '1w', includeShipping: true, coverage: null, listTpl: null, resume: null, customsLimit: 150, protectDays: 7, catOverrides: {} },
   tab: 'summary', shipFilter: 'all', moreOpen: false, open: false, loading: false, cancel: false, progress: '',
   filter: '', captures: [], cards: [], lastUpdate: null, net: [], counts: null,
   meta: null, listAt: 0, detail: null, listResps: [], listSeen: new Set(), reqLog: [], reqSeen: new Set(), sessionIds: new Set(), knownAtStart: new Set(), lastPageOrders: [], cut: { cutoff: null, covered: false }, chain: null, endReason: '', libInfo: null, detailTplCand: null, tabResolve: null, cancelDetail: false,
-  fast: { list: '', detail: '' }, progressDetail: '', detailRerun: false
+  fast: { list: '', detail: '' }, paused: null, progressDetail: '', detailRerun: false
 };
 
 /* ---------------------------- 조회 기간 / 저장된 범위(coverage) ---------------------------- */
@@ -65,10 +65,15 @@ function updateCoverage(reason) {
     if (ds[0]) newFrom = addDaysISO(ds[0], 1);                       // 마지막 페이지의 가장 오래된 날짜는 일부만 받았을 수 있어 하루 여유
   } else if (reason === 'incremental') newFrom = old && old.from;
   if (!newFrom) return;
+  mergeCoverage(newFrom);
+  store.flush();
+}
+/** 저장 범위를 넓힌다 (이미 더 넓으면 유지). 최신 주문부터 이어서 받은 범위만 합쳐지므로 항상 "오늘까지 끊김 없음"이 유지된다 */
+function mergeCoverage(newFrom) {
+  const old = state.settings.coverage;
   let from = newFrom;
   if (old && old.from) from = (old.from === 'all' || newFrom === 'all') ? 'all' : (old.from < newFrom ? old.from : newFrom);
   state.settings.coverage = { from, at: Date.now() };
-  store.save();
 }
 
 /* ---------------------------- 저장소 ---------------------------- */

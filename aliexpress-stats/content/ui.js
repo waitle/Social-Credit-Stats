@@ -79,6 +79,15 @@ h2{font-size:13px;margin:16px 0 8px}
 input.s{width:100%;padding:7px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit;margin-bottom:8px}
 .note{color:var(--mu);font-size:11.5px;margin-top:8px}
 .prog{color:var(--ac2);font-size:12px;flex:1 1 100%}
+.prog.warn{color:var(--wa)}
+@keyframes aes-spin{to{transform:rotate(360deg)}}
+@keyframes aes-slide{0%{left:-40%}100%{left:100%}}
+.spin{display:inline-block;width:11px;height:11px;border:2px solid var(--bd);border-top-color:currentColor;border-radius:50%;animation:aes-spin .9s linear infinite;vertical-align:-2px;margin-right:6px}
+.lbar{height:2px;position:relative;overflow:hidden;flex:none}
+.lbar.on{background:var(--card)}
+.lbar.on::after{content:'';position:absolute;top:0;bottom:0;width:40%;background:var(--ac2);border-radius:2px;animation:aes-slide 1.4s ease-in-out infinite;animation-delay:var(--d,0ms)}
+.fab.busy::before{content:'';display:inline-block;width:11px;height:11px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:aes-spin .9s linear infinite;margin-right:8px;vertical-align:-2px}
+@media (prefers-reduced-motion:reduce){.spin,.lbar.on::after,.fab.busy::before{animation-duration:3.5s}}
 label.st{display:flex;align-items:center;gap:6px;color:var(--mu);font-size:12px}
 label.st select{padding:3px 6px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
 label.st input{width:70px;padding:3px 6px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--fg)}
@@ -249,20 +258,29 @@ function render() {
   const tabs = [['summary', '요약'], ['shipping', `배송 현황${s.inProgress.length ? ` (${s.inProgressItems})` : ''}`], ['refunds', `취소·환불${s.refunds.length ? ` (${s.refunds.length})` : ''}`], ['purchases', '구매 내역']];
   const body = state.tab === 'summary' ? viewSummary(s) : state.tab === 'shipping' ? viewShipping(s) : state.tab === 'refunds' ? viewRefunds(s) : viewPurchases(s);
   const keepScroll = panel.querySelector('.body') ? panel.querySelector('.body').scrollTop : 0;
-  const hadFocus = root.activeElement && root.activeElement.dataset && root.activeElement.dataset.input;
+  // 다시 그려도 입력 중이던 칸의 포커스·값·커서를 유지한다 (불러오는 동안 화면이 계속 갱신되므로)
+  const fe = root.activeElement && root.activeElement.dataset && root.activeElement.dataset.input ? root.activeElement : null;
+  const focusKey = fe ? fe.dataset.input : null, focusVal = fe ? fe.value : null;
+  let focusSel = null; try { focusSel = fe ? [fe.selectionStart, fe.selectionEnd] : null; } catch (_) {}
+  const busy = !!(state.loading || state.detail);
+  const phase = (ms) => `${-Math.round(performance.now() % ms)}ms`;           // 다시 그려도 애니메이션이 끊기지 않도록 위상을 이어 준다
+  const spin = `<i class="spin" style="animation-delay:${phase(900)}"></i>`;
+  const period = state.settings.period || '1w', rs = state.settings.resume;
+  const resumable = !state.loading && !!(rs && rs.oldest) && !coversCutoff(cutoffOf(period));
   const autoRate = s.estimatedRates.USD ? Math.round(s.estimatedRates.USD) : '';
   panel.className = 'panel' + (state.open ? ' open' : '');
   panel.innerHTML = `
     <header><h1>알리 주문 통계</h1><button class="x" data-act="toggle" title="닫기">×</button></header>
+    <div class="lbar ${busy ? 'on' : ''}" style="--d:${phase(1400)}"></div>
     <div class="tabs">${tabs.map(([k, t]) => `<button class="tab ${state.tab === k ? 'on' : ''}" data-tab="${k}">${t}</button>`).join('')}</div>
     <div class="body">${body}</div>
     <div class="tools">
-      ${state.progress ? `<div class="prog">${esc(state.progress)}</div>` : ''}
-      ${state.progressDetail ? `<div class="prog">${esc(state.progressDetail)}</div>` : ''}
-      ${(() => { const k = state.settings.period || '1w'; return !state.loading && !coversCutoff(cutoffOf(k)) ? `<div class="prog" style="color:var(--wa)">${esc(periodInfo(k)[1])} 내역을 아직 불러오지 않았습니다</div>` : ''; })()}
+      ${state.progress ? `<div class="prog ${state.paused ? 'warn' : ''}">${state.loading ? spin : ''}${esc(state.progress)}</div>` : ''}
+      ${state.progressDetail ? `<div class="prog">${state.detail ? spin : ''}${esc(state.progressDetail)}</div>` : ''}
+      ${!state.loading && !coversCutoff(cutoffOf(period)) ? `<div class="prog warn">${resumable ? `${esc(periodInfo(period)[1])} 내역을 ${esc(rs.oldest)}까지 불러왔습니다` : `${esc(periodInfo(period)[1])} 내역을 아직 불러오지 않았습니다`}</div>` : ''}
       <div class="main">
         <label class="st">기간 <select data-input="period">${PERIODS.map((p) => `<option value="${p[0]}" ${(state.settings.period || '1w') === p[0] ? 'selected' : ''}>${p[1]}</option>`).join('')}</select></label>
-        ${state.loading ? '<button class="b" data-act="stop">중단</button>' : '<button class="b pri" data-act="loadall">불러오기</button>'}
+        ${state.loading ? '<button class="b" data-act="stop">중단</button>' : '<button class="b pri" data-act="loadall">' + (resumable ? '이어서 불러오기' : '불러오기') + '</button>'}
         ${state.detail ? '<button class="b" data-act="stopdetail">조회 중단</button>' : '<button class="b" data-act="details">예상 배송일 조회</button>'}
         <button class="b ghost" data-act="more" style="margin-left:auto">설정 ${state.moreOpen ? '▴' : '▾'}</button>
       </div>
@@ -285,8 +303,16 @@ function render() {
       <div class="note" style="flex:1 1 100%;margin:0">수집된 주문 ${s.totalOrders}건</div>
     </div>`;
   fab.style.display = state.open ? 'none' : '';
+  fab.classList.toggle('busy', busy);
   const b = panel.querySelector('.body'); if (b) b.scrollTop = keepScroll;
-  if (hadFocus === 'filter') { const i = panel.querySelector('[data-input="filter"]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
+  if (focusKey) {
+    const i = panel.querySelector(`[data-input="${focusKey}"]`);
+    if (i && i.type !== 'checkbox') {
+      if (focusVal != null) i.value = focusVal;
+      i.focus();
+      try { i.setSelectionRange(focusSel ? focusSel[0] : i.value.length, focusSel ? focusSel[1] : i.value.length); } catch (_) {}
+    }
+  }
 }
 
 function bindEvents() {
@@ -317,8 +343,6 @@ function bindEvents() {
       if (t.value) m[t.dataset.cat] = t.value; else delete m[t.dataset.cat];
       store.save(); render(); return;
     }
-    if (t.dataset.input === 'customs') { const v = parseFloat(t.value); if (v > 0) { state.settings.customsLimit = v; store.save(); clearTimeout(state._dt); state._dt = setTimeout(render, 700); } }
-    if (t.dataset.input === 'protectDays') { const v = parseInt(t.value, 10); if (v > 0) { state.settings.protectDays = v; store.save(); clearTimeout(state._dt); state._dt = setTimeout(render, 700); } }
     if (t.dataset.input === 'ship') { state.settings.includeShipping = !!t.checked; store.save(); }
     if (t.dataset.input === 'period') {
       const nk = t.value, prevK = state.settings.period || '1w';
@@ -330,11 +354,27 @@ function bindEvents() {
     }
     if (t.dataset.input === 'auto') { state.settings.auto = !!t.checked; store.save(); }
     if (t.dataset.input === 'thumbs') { state.settings.thumbs = !!t.checked; store.save(); render(); }
-    if (t.dataset.input === 'fx') {
-      const v = parseFloat(t.value);
-      state.settings.usdRate = v > 0 ? v : null; store.save();
-      clearTimeout(state._dt); state._dt = setTimeout(render, 700);
+  });
+  // 숫자 설정(환율, 관세 한도, 보호 기간 경고)은 입력하는 도중에는 반영하지 않고, 입력을 마쳤을 때(Enter/포커스 이동)만 범위를 확인해 저장한다.
+  // 글자마다 저장하면 중간 값(1, 14, 140…)으로 경고가 계산돼 알림이 쏟아진다.
+  root.addEventListener('change', (e) => {
+    const t = e.target, k = t.dataset && t.dataset.input;
+    if (k !== 'fx' && k !== 'customs' && k !== 'protectDays') return;
+    const raw = String(t.value).trim(), v = parseFloat(raw);
+    const reject = (msg) => { t.blur(); state.progress = msg; render(); };
+    if (k === 'fx') {
+      if (raw === '') state.settings.usdRate = null;
+      else if (!(v >= 300 && v <= 5000)) return reject('환율은 300~5000 사이로 입력하세요');
+      else state.settings.usdRate = v;
+    } else if (k === 'customs') {
+      if (!(v >= 1 && v <= 10000)) return reject('관세 한도는 1~10000 사이로 입력하세요');
+      state.settings.customsLimit = v;
+    } else {
+      const d = parseInt(raw, 10);
+      if (!(d >= 1 && d <= 60)) return reject('보호 기간 경고는 1~60일 사이로 입력하세요');
+      state.settings.protectDays = d;
     }
+    store.save(); render();
   });
 }
 

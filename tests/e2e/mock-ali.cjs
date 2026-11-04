@@ -83,7 +83,9 @@ setTimeout(function(){ lib.mtop.request({api:'mtop.aliexpress.trade.buyer.order.
 }
 
 function startMockAli({ key, cert, port }) {
-  const stats = { listPosts: 0, detailPosts: 0, detailTabs: 0, indexLoads: 0 };
+  const stats = { listPosts: 0, detailPosts: 0, detailTabs: 0, indexLoads: 0, pages: {}, captchaHits: 0 };
+  // 테스트에서 조절: captchaFailsPage3 > 0 이면 그 횟수만큼, -1 이면 해제할 때까지 3페이지 요청에 보안 인증 오류를 돌려준다. delayMs 는 3페이지 응답 지연.
+  const ctl = { captchaFailsPage3: 0, delayMs: 0 };
   const srv = https.createServer({ key, cert }, (req, res) => {
     const u = new URL(req.url, 'https://' + req.headers.host);
     const cors = { 'Access-Control-Allow-Origin': 'https://www.aliexpress.com', 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': 'content-type' };
@@ -103,7 +105,14 @@ function startMockAli({ key, cert, port }) {
             const p = JSON.parse(data.params); idx = p.pageIndex;
             if (p.queryParams !== 'QP' + (idx - 1) + '^^$$AbC+/=') return send({ api, data: {}, ret: ['FAIL_BIZ::bad chain page ' + idx] });
           }
+          if (idx === 3 && ctl.captchaFailsPage3 !== 0) {
+            if (ctl.captchaFailsPage3 > 0) ctl.captchaFailsPage3--;
+            stats.captchaHits++;
+            return send({ api, data: { url: 'https://acs.aliexpress.com/punish?x5secdata=x' }, ret: ['FAIL_SYS_USER_VALIDATE::RGV587_ERROR::验证'] });
+          }
           stats.listPosts++;
+          stats.pages[idx] = (stats.pages[idx] || 0) + 1;
+          if (idx === 3 && ctl.delayMs) return setTimeout(() => send(listPayload(idx)), ctl.delayMs);
           return send(listPayload(idx));
         }
         if (/order\.detail/.test(api)) { stats.detailPosts++; return send(detailPayload(data.orderId)); }
@@ -116,7 +125,7 @@ function startMockAli({ key, cert, port }) {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     res.end(INDEX);
   });
-  return new Promise((resolve) => srv.listen(port, () => resolve({ srv, stats })));
+  return new Promise((resolve) => srv.listen(port, () => resolve({ srv, stats, ctl })));
 }
 
 module.exports = { startMockAli, ALL };

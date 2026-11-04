@@ -196,6 +196,10 @@
 
   /** 중앙 서버 원격 설정으로 보강하는 라벨과 기능 플래그 (확장 재배포 없이 알리 문구 변경에 대응) */
   const EXTRA = { eta: [], protect: [], flags: {} };
+  /** 알리의 보안 확인(캡차/punish) 응답 판별. 응답 문구나 data 일부를 문자열로 넘긴다 */
+  const CAPTCHA_RE = /USER_VALIDATE|RGV587|PUNISH|X5SEC|NOCAPTCHA|CAPTCHA|SLIDE_|被挤爆|滑动|验证/i;
+  const isCaptcha = (text) => CAPTCHA_RE.test(String(text || ''));
+
   /** 기본 중앙 서버 (설정 페이지에서 다른 주소로 바꿀 수 있다) */
   const DEFAULT_SERVER = 'https://social-credit.156048.xyz';
   function applyRemoteConfig(cfg) {
@@ -305,6 +309,6 @@
   }
 
 
-  Object.assign(AES, { DEFAULT_SERVER, EXTRA, applyRemoteConfig, PROTECT_LABEL, pickProtection, pad, DAY, toISO, fromISO, MON, MONNUM, parseDates, currencyOf, parseAmount, MONEY_RE, findMoney, parseMoney, BUTTON_RE, classifyStatus, STATUS_LABEL, DATE_LABEL, TOTAL_LABEL, TOTAL_EXCLUDE, DISCOUNT_LABEL, DISCOUNT_EXCLUDE, ETA_LABEL, ETA_WEAK, ETA_EXCLUDE, pickEta, parseLines });
+  Object.assign(AES, { CAPTCHA_RE, isCaptcha, DEFAULT_SERVER, EXTRA, applyRemoteConfig, PROTECT_LABEL, pickProtection, pad, DAY, toISO, fromISO, MON, MONNUM, parseDates, currencyOf, parseAmount, MONEY_RE, findMoney, parseMoney, BUTTON_RE, classifyStatus, STATUS_LABEL, DATE_LABEL, TOTAL_LABEL, TOTAL_EXCLUDE, DISCOUNT_LABEL, DISCOUNT_EXCLUDE, ETA_LABEL, ETA_WEAK, ETA_EXCLUDE, pickEta, parseLines });
   if (typeof module !== 'undefined' && module.exports) module.exports = AES;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
