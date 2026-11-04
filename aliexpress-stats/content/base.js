@@ -9,7 +9,7 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
 const NOISE_URL = /recommend|cart\.count|cookie\.render/i;
 
 const state = {
-  orders: {}, settings: { usdRate: null, thumbs: true, detailTpl: null, auto: false, period: '1w', includeShipping: true, coverage: null, listTpl: null, resume: null, customsLimit: 150, protectDays: 7, catOverrides: {} },
+  orders: {}, settings: { usdRate: null, thumbs: true, detailTpl: null, auto: false, autoOpen: true, period: '1w', includeShipping: true, coverage: null, listTpl: null, resume: null, customsLimit: 150, protectDays: 7, catOverrides: {} },
   tab: 'summary', shipFilter: 'all', moreOpen: false, open: false, loading: false, cancel: false, progress: '',
   hold: false, held: { orders: [], counts: null },
   filter: '', captures: [], cards: [], lastUpdate: null, net: [], counts: null,

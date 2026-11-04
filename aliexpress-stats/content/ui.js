@@ -294,6 +294,7 @@ function renderNow() {
       </div>
       ${state.moreOpen ? `<div class="more">
         <label class="st" title="체크하면 기간과 무관하게 배송 대기·진행 중인 주문을 모두 불러옵니다 (최대 75일 전까지)"><input type="checkbox" data-input="ship" ${state.settings.includeShipping !== false ? 'checked' : ''} style="width:auto"> 배송 중 주문 항상 포함</label>
+        <label class="st" title="주문 목록 페이지를 열면 통계 패널을 바로 펼칩니다. 끄면 오른쪽 아래 버튼을 눌러 열 때까지 접혀 있습니다"><input type="checkbox" data-input="autoOpen" ${state.settings.autoOpen !== false ? 'checked' : ''} style="width:auto"> 주문 페이지에서 패널 자동 펼치기</label>
         <label class="st" title="주문 페이지를 열면 자동으로 목록 + 예상 배송일을 수집"><input type="checkbox" data-input="auto" ${state.settings.auto === true ? 'checked' : ''} style="width:auto"> 자동 실행</label>
         <label class="st"><input type="checkbox" data-input="thumbs" ${state.settings.thumbs !== false ? 'checked' : ''} style="width:auto"> 썸네일</label>
         <label class="st" title="비워두면 같은 상품의 두 통화 가격으로 자동 추정">USD 환율(원) <input type="number" min="500" max="3000" placeholder="${autoRate || '자동'}" value="${state.settings.usdRate > 0 ? state.settings.usdRate : ''}" data-input="fx"></label>
@@ -385,6 +386,7 @@ function bindEvents() {
       if (!coversCutoff(cutoffOf(nk))) loadAll({ confirmed: true });                      // 저장된 범위를 넘으면 추가분만 불러오기
       return;
     }
+    if (t.dataset.input === 'autoOpen') { state.settings.autoOpen = !!t.checked; store.save(); }
     if (t.dataset.input === 'auto') { state.settings.auto = !!t.checked; store.save(); }
     if (t.dataset.input === 'thumbs') { state.settings.thumbs = !!t.checked; store.save(); renderNow(); }
   });

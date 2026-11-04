@@ -17,7 +17,7 @@
   (async () => {
     await store.load();
     applyRemoteConfig();
-    if (/\/p\/order\/index/i.test(location.pathname)) { state.open = true; if (state.settings.lastOrigin !== location.origin) { state.settings.lastOrigin = location.origin; store.save(); } }
+    if (/\/p\/order\/index/i.test(location.pathname)) { if (state.settings.autoOpen !== false) state.open = true; if (state.settings.lastOrigin !== location.origin) { state.settings.lastOrigin = location.origin; store.save(); } }
     render();
     scanDom();
     setTimeout(scanDom, 1500);

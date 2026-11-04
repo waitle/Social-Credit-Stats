@@ -212,6 +212,22 @@ const open = async (ctx) => {
     await ctx.close();
   });
 
+  await step('설정: 주문 페이지에서 패널 자동 펼치기 끄고 켜기', async () => {
+    reset();
+    const ctx = await fresh('p5e', { auto: false }); let page = await open(ctx);
+    const isOpen = (pg) => pg.evaluate(() => document.getElementById('aes-host').shadowRoot.querySelector('.panel').classList.contains('open'));
+    await page.waitForTimeout(800);
+    assert.strictEqual(await isOpen(page), true, '기본값은 자동으로 펼침');
+    await clickShadow(page, '[data-act="more"]');
+    await page.evaluate(() => { const el = document.getElementById('aes-host').shadowRoot.querySelector('[data-input="autoOpen"]'); el.checked = false; el.dispatchEvent(new Event('input', { bubbles: true })); });
+    await page.waitForTimeout(600);
+    await page.reload(); await page.waitForTimeout(800);
+    assert.strictEqual(await isOpen(page), false, '끄면 접힌 채로 열림');
+    await clickShadow(page, '.fab');
+    assert.strictEqual(await isOpen(page), true, '버튼을 누르면 열림');
+    await ctx.close();
+  });
+
   await step('이미 불러온 범위에서 "불러오기"를 누르면 아무 일도 안 하는 대신 최신 주문을 다시 확인한다', async () => {
     reset();
     const ctx = await fresh('p5d', { auto: false }); const page = await open(ctx);
