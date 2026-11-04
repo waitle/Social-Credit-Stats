@@ -1,5 +1,7 @@
 # 알리 주문 통계 (크롬 확장)
 
+> 비공식 도구로 AliExpress / Alibaba Group과 무관합니다. 이용약관 준수와 계정 제한 위험은 사용자 책임입니다. 자세한 고지는 [저장소 README](../README.md)를 보세요. 영어 이름: *Order Stats for AliExpress*.
+
 알리익스프레스 **주문 내역 페이지**(`aliexpress.com/p/order/...`)를 열면 오른쪽에 통계 패널이 열리고, 선택한 기간의 주문과 예상 배송일을 자동으로 불러옵니다. 설치 방법은 [저장소 README](../README.md)를 보세요.
 
 ## 화면

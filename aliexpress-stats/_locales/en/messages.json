@@ -1,8 +1,8 @@
 {
   "extName": {
-    "message": "AliExpress Order Stats"
+    "message": "Order Stats for AliExpress"
   },
   "extDesc": {
-    "message": "Spending, discounts and category stats for your AliExpress orders, per-item delivery estimates, refund status, buyer-protection and customs-limit alerts. Data stays in your browser."
+    "message": "Unofficial tool, not affiliated with AliExpress. Spending, discounts and category stats for your own orders, per-item delivery estimates, refund status, buyer-protection and customs-limit alerts. Data stays in your browser."
   }
 }

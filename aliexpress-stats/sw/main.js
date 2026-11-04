@@ -39,7 +39,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'openOptions': chrome.runtime.openOptionsPage(); return;
     // 팝업/설정 페이지 요청 (비동기 응답)
     case 'refreshNow': runBackgroundRefresh().then((r) => sendResponse({ result: r })); return true;
-    case 'checkUpdate': Promise.all([checkSelfReload(), checkRemoteVersion()]).then(([, info]) => sendResponse({ info })); return true;
+    case 'checkUpdate': (async () => {
+      const self = await checkSelfReload(true);                 // 판단만 (응답을 먼저 보낸 뒤 다시 로드)
+      const info = await checkRemoteVersion();
+      sendResponse({ info, self });
+      if (self.reload) setTimeout(() => chrome.runtime.reload(), 800);
+    })(); return true;
     case 'fetchServerConfig': fetchServerConfig().then((c) => sendResponse({ ok: !!c, config: c })); return true;
     case 'flushHealth': flushHealth().then((n) => sendResponse({ sent: n })); return true;
     case 'rescheduleAlarms': scheduleAlarms().then(() => sendResponse({ ok: true })); return true;

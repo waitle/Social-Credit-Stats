@@ -1,5 +1,11 @@
 # Social Credit Stats — 알리 주문 통계
 
+> **비공식 프로젝트입니다.** 이 프로젝트는 AliExpress / Alibaba Group과 제휴, 후원, 승인 관계가 없으며 "AliExpress"는 해당 회사의 상표입니다. 알리익스프레스의 이름은 이 도구가 어느 사이트에서 동작하는지 설명하는 용도로만 씁니다.
+>
+> **이용약관과 계정 위험을 이해하고 사용하세요.** 이 도구는 사용자가 로그인한 본인 계정의 주문 정보를 사용자의 브라우저 안에서 읽습니다. 그러나 알리익스프레스의 이용약관은 자동화된 접근을 제한할 수 있고, 보안 확인(캡차)이 나타나거나 계정 이용이 제한될 가능성을 배제할 수 없습니다. 사용에 따른 책임은 사용자에게 있으며, 개발자는 이로 인한 불이익에 책임지지 않습니다 (MIT 라이선스의 "있는 그대로 제공" 조항 참고).
+>
+> *This is an unofficial tool, not affiliated with, endorsed by, or sponsored by AliExpress or Alibaba Group. "AliExpress" is a trademark of its owner and is used only to describe what the tool works with. Use it at your own risk and make sure your use complies with the site's terms.*
+
 알리익스프레스 주문 내역을 통계로 보여주는 크롬 확장 프로그램과, 이를 돕는 경량 중앙 서버입니다.
 
 | 폴더 | 내용 |
@@ -25,6 +31,17 @@
 확장 ID가 고정돼 있어서(`manifest.json`의 `key`) 경로가 바뀌거나 다시 설치해도 저장된 데이터가 유지됩니다.
 
 > 이전 버전(1.x)에서 옮겨 오는 경우: 1.x는 설치 경로에 따라 ID가 달라서 데이터가 이어지지 않습니다. 1.x 패널의 **디버그** 파일을 내려받아 두었다가, 새 버전 패널의 **설정 → 복원**으로 불러오면 주문 데이터를 옮길 수 있습니다.
+
+### 업데이트가 안 될 때
+
+업데이터는 **설치 폴더**(Windows `%LOCALAPPDATA%\AliOrderStats\extension`, macOS `~/Library/Application Support/AliOrderStats/extension`, Linux `~/.local/share/ali-order-stats/extension`)의 파일만 바꿉니다. 크롬에 다른 폴더(예: 저장소를 받은 폴더)를 로드했다면 그 폴더는 자동으로 바뀌지 않습니다.
+
+1. 확장 **설정 → 업데이트 → 지금 확인**: 새 버전 유무와, 이 확장이 로드된 폴더의 파일 버전을 알려 줍니다.
+2. 설치 폴더의 `update.log`: `설치본 X / 원격 Y`로 어디까지 갔는지 보입니다.
+3. 업데이터를 직접 실행해 오류를 확인합니다.
+   - Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File "%LOCALAPPDATA%\AliOrderStats\update.ps1"`
+   - macOS/Linux: 설치 폴더의 `update.sh`
+4. 파일이 새 버전인데 확장이 그대로면 `chrome://extensions`에서 이 확장의 새로고침(↻)을 누르세요. 개발자 모드에서 로드한 확장만 스스로 다시 로드합니다.
 
 ## 주요 기능
 

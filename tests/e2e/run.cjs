@@ -243,6 +243,17 @@ async function waitIdle(page, ms = 25000) {
     assert.deepStrictEqual({ running: r.running, disk: r.disk, reload: r.reload }, { running: v1, disk: mf.version, reload: true });
     const same = await w1.evaluate(async () => { const m = chrome.runtime.getManifest(); return cmpVersion(m.version, m.version); });
     assert.strictEqual(same, 0);
+    // 설정 페이지의 업데이트 안내: 디스크 버전과 실행 중 버전을 구분해서 다음에 할 일을 알려준다
+    const opt = await c2.newPage();
+    await opt.goto(`chrome-extension://${new URL(w1.url()).host}/options/options.html`);
+    const msg = (info, self) => opt.evaluate(([i, s]) => describeUpdate({ info: i, self: s }), [info, self]);
+    assert.match(await msg({ available: false, latest: '2.0.0' }, null), /최신 버전입니다/);
+    assert.match(await msg({ available: true, latest: '2.1.0' }, { reload: true, disk: '2.1.0', running: '2.0.0', unpacked: true }), /곧 다시 로드/);
+    const stuck = await msg({ available: true, latest: '2.1.0' }, { reload: false, disk: '2.0.0', running: '2.0.0', unpacked: true });
+    assert.match(stuck, /아직 2\.0\.0/); assert.match(stuck, /설치 폴더/);
+    assert.match(await msg({ available: true, latest: '2.1.0' }, { reload: false, unpacked: false }), /스토어/);
+    assert.match(await msg(null, null), /확인하지 못했습니다/);
+    await opt.close();
     await c2.close();
   });
 

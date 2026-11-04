@@ -41,10 +41,20 @@ $('bgNow').onclick = async () => {
 $('updNow').onclick = async () => {
   $('updStatus').textContent = '확인 중…';
   const r = await chrome.runtime.sendMessage({ type: 'checkUpdate' });
-  const i = r && r.info;
-  $('updStatus').textContent = i ? (i.available ? `새 버전 ${i.latest}이 있습니다` : `최신 버전입니다 (${i.latest})`) : '확인하지 못했습니다';
+  $('updStatus').textContent = describeUpdate(r);
   init();
 };
+
+/** 업데이트 확인 결과를 사용자가 다음에 할 일로 풀어서 보여준다 */
+function describeUpdate(r) {
+  const i = r && r.info, self = r && r.self;
+  if (!i) return '새 버전을 확인하지 못했습니다 (GitHub에 연결할 수 없음)';
+  if (!i.available) return `최신 버전입니다 (${i.latest})`;
+  if (self && self.reload) return `새 버전 ${i.latest} 파일이 이 폴더에 이미 있어 곧 다시 로드합니다`;
+  if (self && self.unpacked === false) return `새 버전 ${i.latest}이 있습니다. 스토어로 설치한 확장은 크롬이 곧 자동으로 업데이트합니다`;
+  const disk = self && self.disk ? self.disk : '?';
+  return `새 버전 ${i.latest}이 있지만 이 확장이 로드된 폴더의 파일은 아직 ${disk} 입니다 → 업데이터가 이 폴더를 바꾸지 못했습니다. ① 업데이터를 직접 실행하고 ② 크롬에 로드한 폴더가 설치 폴더(Windows: %LOCALAPPDATA%\\AliOrderStats\\extension)인지 확인하세요. 설치 폴더가 아닌 곳(저장소 폴더 등)을 로드했다면 그 폴더는 자동으로 바뀌지 않습니다`;
+}
 
 $('srvTest').onclick = async () => {
   const s = await getSettings(); const base = serverUrl(s);

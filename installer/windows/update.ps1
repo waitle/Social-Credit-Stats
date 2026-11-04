@@ -15,6 +15,12 @@ $ext = Join-Path $InstallDir 'extension'
 $log = Join-Path $InstallDir 'update.log'
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 function Write-Log($m) { $line = "$(Get-Date -Format s) $m"; Add-Content -Path $log -Value $line -Encoding UTF8; Write-Host $line }
+# raw.githubusercontent.com 은 JSON 을 text/plain 으로 내려줘서 Invoke-RestMethod 가 자동으로 해석하지 못한다 → 직접 파싱
+function Get-Json($url) {
+  $r = Invoke-WebRequest -UseBasicParsing -Uri $url -Headers @{ 'Cache-Control' = 'no-cache' }
+  $text = [Text.Encoding]::UTF8.GetString($r.RawContentStream.ToArray()).TrimStart([char]0xFEFF)
+  return $text | ConvertFrom-Json
+}
 function Get-Ver($dir) { $p = Join-Path $dir 'manifest.json'; if (Test-Path $p) { (Get-Content $p -Raw -Encoding UTF8 | ConvertFrom-Json).version } }
 
 $cur = Get-Ver $ext
@@ -23,7 +29,9 @@ try {
   if ($Source) {
     $src = (Resolve-Path $Source).Path
   } else {
-    $remote = (Invoke-RestMethod -UseBasicParsing "https://raw.githubusercontent.com/$Repo/$Branch/aliexpress-stats/manifest.json").version
+    $remote = (Get-Json "https://raw.githubusercontent.com/$Repo/$Branch/aliexpress-stats/manifest.json").version
+    if (-not $remote) { throw '원격 버전을 읽지 못했습니다' }
+    Write-Log "설치본 $(if ($cur) { $cur } else { '없음' }) / 원격 $remote"
     if (-not $Force -and $cur -and ([version]$remote -le [version]$cur)) { Write-Log "최신 버전 사용 중 ($cur)"; return }
     New-Item -ItemType Directory -Path $tmp | Out-Null
     $zip = Join-Path $tmp 'src.zip'
@@ -38,7 +46,7 @@ try {
 
   # robocopy /MIR: 설치 폴더를 새 버전과 똑같이 맞춘다 (폴더 경로는 그대로 → 크롬이 같은 확장으로 인식)
   New-Item -ItemType Directory -Force -Path $ext | Out-Null
-  & robocopy $src $ext /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+  & robocopy $src $ext /MIR /R:2 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null   # 파일이 잠겨 있어도 무한정 기다리지 않는다
   if ($LASTEXITCODE -ge 8) { throw "파일 복사 실패 (robocopy $LASTEXITCODE)" }
   Write-Log "업데이트 완료 $(if ($cur) { $cur } else { '없음' }) → $new"
 } finally {

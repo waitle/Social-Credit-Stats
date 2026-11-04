@@ -42,6 +42,7 @@ if [ -n "${AOS_SOURCE:-}" ]; then
 else
   REMOTE="$(curl -fsSL --max-time 30 "$MANIFEST_URL" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1 || true)"
   if [ -z "$REMOTE" ]; then log "최신 버전을 확인하지 못했습니다 ($MANIFEST_URL)"; exit 1; fi
+  log "설치본 ${CUR:-없음} / 원격 $REMOTE"
   if [ "$FORCE" -eq 0 ] && [ -n "$CUR" ] && ! newer "$CUR" "$REMOTE"; then log "최신 버전 사용 중 ($CUR)"; exit 0; fi
   curl -fsSL --max-time 120 -o "$TMP/src.zip" "$ZIP_URL"
   if command -v unzip >/dev/null 2>&1; then unzip -q "$TMP/src.zip" -d "$TMP/src"
