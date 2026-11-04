@@ -9,7 +9,7 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
 const NOISE_URL = /recommend|cart\.count|cookie\.render/i;
 
 const state = {
-  orders: {}, settings: { usdRate: null, thumbs: true, detailTpl: null, auto: true, period: '1w', includeShipping: true, coverage: null, listTpl: null, resume: null, customsLimit: 150, protectDays: 7, catOverrides: {} },
+  orders: {}, settings: { usdRate: null, thumbs: true, detailTpl: null, auto: false, period: '1w', includeShipping: true, coverage: null, listTpl: null, resume: null, customsLimit: 150, protectDays: 7, catOverrides: {} },
   tab: 'summary', shipFilter: 'all', moreOpen: false, open: false, loading: false, cancel: false, progress: '',
   filter: '', captures: [], cards: [], lastUpdate: null, net: [], counts: null,
   meta: null, listAt: 0, detail: null, listResps: [], listSeen: new Set(), reqLog: [], reqSeen: new Set(), sessionIds: new Set(), knownAtStart: new Set(), lastPageOrders: [], cut: { cutoff: null, covered: false }, chain: null, endReason: '', libInfo: null, detailTplCand: null, tabResolve: null, cancelDetail: false,
@@ -89,23 +89,32 @@ const store = {
       }
       if (r.counts) state.counts = r.counts;
       if (r.settings) state.settings = { ...state.settings, ...r.settings };
+      if ((state.settings.defaultsV || 0) < 1) {                       // 자동 실행 기본값을 "끔"으로 바꾼 버전: 예전 기본값(켬)이 저장돼 있던 설치도 한 번만 끈다
+        state.settings.auto = false; state.settings.defaultsV = 1; store.save();
+      }
     } catch (_) {}
   },
   _t: null,
+  locked: false,                                    // 초기화 중에는 아무것도 저장하지 않는다 (진행 중이던 작업이 지운 기록을 다시 쓰지 못하게)
   async flush() {                                   // 즉시 저장
     clearTimeout(store._t); store._t = null;
+    if (store.locked) return;
     try { await chrome.storage.local.set({ orders: state.orders, settings: state.settings, counts: state.counts }); } catch (_) {}
   },
-  save() { clearTimeout(store._t); store._t = setTimeout(() => store.flush(), 300); },
-  /** 저장된 주문과, 그 주문이 "어디까지 불러왔는지" 알려 주는 기록(범위·이어받기 지점)을 함께 지운다.
-   *  주문만 지우고 범위를 남기면 다음 불러오기가 "이미 다 받았다"고 판단해 아무것도 받지 않는다. */
+  save() { if (store.locked) return; clearTimeout(store._t); store._t = setTimeout(() => store.flush(), 300); },
+  /** 저장된 주문과 그에 딸린 기록을 모두 지운다: 주문, 알리 집계(배송 중/배송 전), "어디까지 불러왔는지"(범위·이어받기 지점),
+   *  요청 형식 캐시, 알림 기준선, 상태 보고 대기열. 사용자 설정(기간·환율·관세 한도·분류 수정 등)은 남긴다.
+   *  범위만 남기면 다음 불러오기가 "이미 다 받았다"고 판단해 아무것도 받지 않는다. */
   async clear() {
-    clearTimeout(store._t); store._t = null;
+    store.locked = true; clearTimeout(store._t); store._t = null;
     state.orders = {}; state.counts = null;
-    state.settings.coverage = null; state.settings.resume = null;
+    Object.assign(state.settings, { coverage: null, resume: null, listTpl: null, detailTpl: null });
     state.knownAtStart = new Set(); state.sessionIds = new Set(); state.lastPageOrders = [];
     state.cut = { cutoff: null, covered: false }; state.chain = null; state.endReason = '';
-    try { await chrome.storage.local.remove(['orders', 'counts']); await chrome.storage.local.set({ settings: state.settings }); } catch (_) {}
+    try {
+      await chrome.storage.local.remove(['orders', 'counts', 'notifyState', 'healthQueue']);
+      await chrome.storage.local.set({ settings: state.settings });
+    } catch (_) {}
   }
 };
 

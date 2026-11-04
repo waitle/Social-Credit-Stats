@@ -72,6 +72,22 @@ async function waitIdle(page, ms = 25000) {
   };
   const clicks = (page) => page.evaluate(() => page - 1);    // 가짜 페이지에서 "주문 더 보기"로 로드된 페이지 수
 
+  await step('기본값: 자동 실행 꺼짐 → 페이지를 열어도 조회하지 않고, 불러오기를 눌러야 시작', async () => {
+    const { page } = await openIndex();
+    await page.waitForTimeout(2500);
+    assert.ok(stats.listPosts <= 1, '페이지 자신의 1페이지 요청 외에 자동 조회가 없어야 함: ' + stats.listPosts);
+    assert.strictEqual(stats.detailPosts + stats.detailTabs, 0, '예상 배송일을 자동으로 조회하면 안 됨');
+    const t = await waitPanel(page, /수집된 주문/);
+    assert.doesNotMatch(t, /불러오는 중|조회 중|저장됨/);
+    await shadowClick(page, '[data-act="more"]');
+    assert.strictEqual(await page.evaluate(() => document.getElementById('aes-host').shadowRoot.querySelector('[data-input="auto"]').checked), false);
+    await page.close();
+    // 이후 단계는 자동 실행을 켠 상태로 확인한다
+    const w = await sw(ctx);
+    await w.evaluate(async () => { const { settings } = await chrome.storage.local.get('settings'); settings.auto = true; await chrome.storage.local.set({ settings }); });
+    stats.listPosts = 0;
+  });
+
   await step('첫 접속: 기본 1주일, 클릭 없이 1페이지 + 예상 배송일 직접 호출', async () => {
     const { page, errs } = await openIndex();
     await waitIdle(page);

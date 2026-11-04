@@ -294,7 +294,7 @@ function renderNow() {
       </div>
       ${state.moreOpen ? `<div class="more">
         <label class="st" title="체크하면 기간과 무관하게 배송 대기·진행 중인 주문을 모두 불러옵니다 (최대 75일 전까지)"><input type="checkbox" data-input="ship" ${state.settings.includeShipping !== false ? 'checked' : ''} style="width:auto"> 배송 중 주문 항상 포함</label>
-        <label class="st" title="주문 페이지를 열면 자동으로 목록 + 예상 배송일을 수집"><input type="checkbox" data-input="auto" ${state.settings.auto !== false ? 'checked' : ''} style="width:auto"> 자동 실행</label>
+        <label class="st" title="주문 페이지를 열면 자동으로 목록 + 예상 배송일을 수집"><input type="checkbox" data-input="auto" ${state.settings.auto === true ? 'checked' : ''} style="width:auto"> 자동 실행</label>
         <label class="st"><input type="checkbox" data-input="thumbs" ${state.settings.thumbs !== false ? 'checked' : ''} style="width:auto"> 썸네일</label>
         <label class="st" title="비워두면 같은 상품의 두 통화 가격으로 자동 추정">USD 환율(원) <input type="number" min="500" max="3000" placeholder="${autoRate || '자동'}" value="${state.settings.usdRate > 0 ? state.settings.usdRate : ''}" data-input="fx"></label>
         <label class="st" title="같은 상점·같은 날 주문 합계 또는 주문 1건이 이 금액을 넘으면 경고">관세 한도($) <input type="number" min="1" max="10000" value="${state.settings.customsLimit || 150}" data-input="customs"></label>
@@ -323,6 +323,28 @@ function renderNow() {
   }
 }
 
+/** 진행 중인 목록·예상 배송일 조회를 먼저 멈춘 뒤 모든 기록을 지우고, 페이지를 새로 열어 1페이지부터 다시 시작할 수 있게 한다 */
+async function resetAll() {
+  state.cancel = true; state.cancelDetail = true;
+  try { chrome.runtime.sendMessage({ type: 'cancelDetails' }); } catch (_) {}
+  state.progress = '조회를 멈추고 초기화하는 중…'; renderNow();
+  for (let i = 0; i < 100 && (state.loading || state.detail); i++) await sleep(50);   // 최대 5초
+  await store.clear();                                                                // 이후 남은 작업이 있어도 저장되지 않는다 (store.locked)
+  location.reload();
+}
+
+/** "불러오기" 버튼. 이미 불러온 범위 안이면 이 화면의 1페이지는 열 때 받은 것이라 오래됐을 수 있으므로, 페이지를 새로 열어 최신 주문부터 다시 확인한다 */
+function requestLoad() {
+  if (state.loading) return;
+  if (coversCutoff(cutoffOf(state.settings.period || '1w'))) {
+    state.progress = '최신 주문을 확인하려고 페이지를 새로 엽니다…'; renderNow();
+    try { sessionStorage.setItem('aes-run-once', '1'); } catch (_) {}
+    store.flush().then(() => location.reload());
+    return;
+  }
+  loadAll();
+}
+
 function bindEvents() {
   root.addEventListener('focusout', () => { if (renderDeferred) { renderDeferred = false; scheduleRender(); } });
   root.addEventListener('click', (e) => {
@@ -332,7 +354,7 @@ function bindEvents() {
     const act = t.dataset.act;
     if (act === 'more') { state.moreOpen = !state.moreOpen; renderNow(); }
     else if (act === 'toggle') { state.open = !state.open; if (state.open) scanDom(); renderNow(); }
-    else if (act === 'loadall') loadAll();
+    else if (act === 'loadall') requestLoad();
     else if (act === 'stop') { state.cancel = true; }
     else if (act === 'details') fetchDetails(true);
     else if (act === 'stopdetail') { state.cancelDetail = true; try { chrome.runtime.sendMessage({ type: 'cancelDetails' }); } catch (_) {} }
@@ -342,7 +364,7 @@ function bindEvents() {
     else if (act === 'restore') importBackup();
     else if (act === 'options') { try { chrome.runtime.sendMessage({ type: 'openOptions' }); } catch (_) {} }
     else if (act === 'debug') exportDebug();
-    else if (act === 'clear') { if (confirm('저장된 주문 통계 데이터를 모두 지울까요?')) { state.cancel = true; store.clear().then(() => location.reload()); } }   // 페이지를 새로 열어야 1페이지부터 다시 시작한다 (끝까지 본 화면의 '더 없음' 상태가 남지 않도록)
+    else if (act === 'clear') { if (confirm('저장된 주문 통계 데이터를 모두 지울까요? (진행 중인 조회는 중단됩니다)')) resetAll(); }
   });
   root.addEventListener('input', (e) => {
     const t = e.target;

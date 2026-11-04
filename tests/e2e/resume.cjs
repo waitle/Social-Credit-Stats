@@ -50,7 +50,7 @@ async function waitIdle(page, ms = 25000) {
 async function fresh(name, extra = {}) {
   const ctx = await launch(path.join(TMP, name));
   const w = await swOf(ctx);
-  await w.evaluate((x) => chrome.storage.local.set({ settings: Object.assign({ period: 'all', captchaPollMs: 100, captchaTimeoutMs: 1500 }, x) }), extra);
+  await w.evaluate((x) => chrome.storage.local.set({ settings: Object.assign({ auto: true, defaultsV: 1, period: 'all', captchaPollMs: 100, captchaTimeoutMs: 1500 }, x) }), extra);
   return ctx;
 }
 const open = async (ctx) => {
@@ -176,21 +176,52 @@ const open = async (ctx) => {
     await ctx.close();
   });
 
-  await step('초기화하면 저장 범위·이어받기 지점도 지워져, 다시 불러오기가 처음부터 받는다', async () => {
-    reset();
-    const ctx = await fresh('p5c'); const page = await open(ctx);
-    await waitIdle(page);
-    let st = await stored(ctx);
-    assert.strictEqual(Object.keys(st.orders).length, ALL.length);
-    assert.ok(st.settings.coverage, '불러온 뒤에는 저장 범위가 있어야 함');
+  await step('초기화: 진행 중이던 조회를 멈추고 주문·집계·범위·이어받기·알림 기준선까지 모두 지운다', async () => {
+    reset(); ctl.delayMs = 1200;
+    const ctx = await fresh('p5c', { auto: false }); const page = await open(ctx);
+    const w = await swOf(ctx);
+    await w.evaluate(async () => { globalThis.__rm = []; chrome.storage.onChanged.addListener((c) => __rm.push(...Object.keys(c).filter((k) => c[k].newValue === undefined))); await chrome.storage.local.set({ notifyState: { orders: {}, sig: 'x' } }); });
+    await page.waitForTimeout(600);
+    await clickShadow(page, '[data-act="loadall"]');
+    const spinning = () => page.evaluate(() => !!document.getElementById('aes-host').shadowRoot.querySelector('.tools .spin')).catch(() => false);
+    for (let i = 0; i < 60 && !(await spinning()); i++) await page.waitForTimeout(100);
+    assert.ok(await spinning(), '조회가 진행 중이어야 함');
     await clickShadow(page, '[data-act="more"]');
     await clickShadow(page, '[data-act="clear"]');                       // confirm 은 자동 수락
-    reset();                                                            // 이후 요청 수만 센다
-    // 초기화하면 페이지가 새로 열리고(자동 실행) 처음부터 전부 다시 받는다
     await page.waitForEvent('load');
+    await page.waitForTimeout(3500);                                     // 멈추지 않았다면 이 사이 계속 받아 저장했을 것
+    assert.ok(!(await spinning()), '초기화 뒤에는 조회가 돌고 있으면 안 됨');
+    const st = await stored(ctx);
+    const removed = await w.evaluate(() => __rm);
+    for (const k of ['orders', 'counts', 'notifyState']) assert.ok(removed.includes(k), `${k} 가 삭제돼야 함: ${removed}`);
+    assert.ok(Object.keys(st.orders || {}).length < ALL.length, '초기화 뒤 전부 받아져 있으면 안 됨 (진행 중 작업이 계속 저장함)');
+    assert.strictEqual(st.settings.coverage, null);
+    assert.ok(!st.settings.resume, '이어받기 지점이 남으면 "이어서 불러오기"로 보인다');
+    assert.ok(!st.settings.listTpl && !st.settings.detailTpl);
+    const t = await panelText(page);
+    assert.ok(/불러오기/.test(t) && !/이어서 불러오기/.test(t), '버튼은 "불러오기"여야 함');
+    assert.strictEqual(st.settings.auto, false, '자동 실행은 꺼진 채로');
+    // 다시 불러오기 → 처음부터 전부
+    reset();
+    await clickShadow(page, '[data-act="loadall"]');
     await waitIdle(page);
-    { const a = await stored(ctx); assert.strictEqual(Object.keys(a.orders).length, ALL.length, '초기화 후 다시 전부 받아야 함: ' + JSON.stringify({ n: Object.keys(a.orders).length, cov: a.settings.coverage, posts: stats.listPosts })); }
-    assert.ok(stats.listPosts >= 1, '서버에 목록 요청을 실제로 보내야 함');
+    assert.strictEqual(Object.keys((await stored(ctx)).orders).length, ALL.length);
+    assert.ok(stats.listPosts >= 1);
+    await ctx.close();
+  });
+
+  await step('이미 불러온 범위에서 "불러오기"를 누르면 아무 일도 안 하는 대신 최신 주문을 다시 확인한다', async () => {
+    reset();
+    const ctx = await fresh('p5d', { auto: false }); const page = await open(ctx);
+    await page.waitForTimeout(600);
+    await clickShadow(page, '[data-act="loadall"]');
+    await waitIdle(page);                                               // 전체 범위를 불러옴 → 이후 어떤 기간이든 저장 범위 안
+    const loads = stats.indexLoads;
+    await clickShadow(page, '[data-act="loadall"]');
+    await page.waitForEvent('load');
+    const t = await waitText(page, /추가분 확인|목록 .*저장됨/, 15000);
+    assert.ok(stats.indexLoads > loads, '페이지를 새로 열어 최신 목록을 받아야 함');
+    assert.match(t, /\d+건 저장됨/);
     await ctx.close();
   });
 
