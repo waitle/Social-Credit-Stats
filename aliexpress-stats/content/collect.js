@@ -3,7 +3,7 @@
 'use strict';
 function scanDom(force) {
   try {
-    if (!document.body) return 0;
+    if (!document.body || state.hold) return 0;
     if (force !== true && state.listAt && !DETAIL_PATH) return 0; // API 로 받은 데이터가 있으면 DOM 스캔 불필요
     const { orders, cards } = AES.scrapeDom(document, { ref: new Date() });
     state.cards = cards;
@@ -23,7 +23,9 @@ function onHook(url, text) {
   // 알리 자체 집계 (배송 중 / 처리 중 / 결제 대기)
   if (/order\.count/i.test(url) && json.data && json.data.module) {
     const m = json.data.module;
-    state.counts = { shipped: +m.shipped || 0, processing: +m.processing || 0, unpaid: +m.unpaid || 0, at: Date.now() };
+    const c = { shipped: +m.shipped || 0, processing: +m.processing || 0, unpaid: +m.unpaid || 0, at: Date.now() };
+    if (state.hold) { state.held.counts = c; return []; }
+    state.counts = c;
     store.save(); scheduleRender();
     return [];
   }

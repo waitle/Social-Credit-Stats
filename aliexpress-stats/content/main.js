@@ -6,6 +6,7 @@
   window.__aesLoaded = true;
   if (DETAIL_AUTO) { runDetailAuto(); return; }   // UI 없이 상세 정보만 보내고 끝
 
+  try { if (sessionStorage.getItem('aes-empty') === '1') { sessionStorage.removeItem('aes-empty'); state.hold = true; } } catch (_) {}   // 초기화 직후: 조회를 시작할 때까지 빈 화면
   initCollect();
   initDetailsMessages();
   if (LIST_AUTO) { runListAuto(); return; }      // 백그라운드 자동 갱신: UI 없이 추가분 + 예상 배송일만 갱신

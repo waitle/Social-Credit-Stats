@@ -330,6 +330,7 @@ async function resetAll() {
   state.progress = '조회를 멈추고 초기화하는 중…'; renderNow();
   for (let i = 0; i < 100 && (state.loading || state.detail); i++) await sleep(50);   // 최대 5초
   await store.clear();                                                                // 이후 남은 작업이 있어도 저장되지 않는다 (store.locked)
+  try { sessionStorage.setItem('aes-empty', '1'); } catch (_) {}                       // 새로 열린 페이지는 조회를 시작할 때까지 비어 있게
   location.reload();
 }
 
@@ -356,9 +357,9 @@ function bindEvents() {
     else if (act === 'toggle') { state.open = !state.open; if (state.open) scanDom(); renderNow(); }
     else if (act === 'loadall') requestLoad();
     else if (act === 'stop') { state.cancel = true; }
-    else if (act === 'details') fetchDetails(true);
+    else if (act === 'details') { releaseHold(); fetchDetails(true); }
     else if (act === 'stopdetail') { state.cancelDetail = true; try { chrome.runtime.sendMessage({ type: 'cancelDetails' }); } catch (_) {} }
-    else if (act === 'rescan') { const n = scanDom(true); state.progress = `다시 읽음 (변경 ${n}건)`; renderNow(); }
+    else if (act === 'rescan') { releaseHold(); const n = scanDom(true); state.progress = `다시 읽음 (변경 ${n}건)`; renderNow(); }
     else if (act === 'csv') exportCsv();
     else if (act === 'backup') exportBackup();
     else if (act === 'restore') importBackup();

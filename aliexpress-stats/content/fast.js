@@ -260,6 +260,7 @@ function findMoreButton() {
 /** opts.auto: 페이지를 열 때 자동 실행 / opts.confirmed: 이미 경고를 확인함 */
 async function loadAll(opts = {}) {
   if (state.loading) return;
+  releaseHold();
   let key = state.settings.period || '1w';
   if (opts.background && needsConfirm(key)) key = '1w';                // 백그라운드 갱신: 경고창 없이 저장된 범위의 추가분만
   else if (!opts.confirmed && needsConfirm(key) && !confirmHeavy(periodInfo(key)[1])) {

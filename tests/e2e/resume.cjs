@@ -33,7 +33,7 @@ const panelText = (page) => page.evaluate(() => document.getElementById('aes-hos
 const shadow = (page, fn, arg) => page.evaluate(fn, arg);
 const clickShadow = (page, sel) => page.evaluate((s) => { const e = document.getElementById('aes-host').shadowRoot.querySelector(s); if (e) e.click(); return !!e; }, sel);
 const clicks = (page) => page.evaluate(() => page - 1);                // 가짜 페이지에서 "주문 더 보기" 클릭으로 로드된 페이지 수
-const stored = async (ctx) => (await swOf(ctx)).evaluate(() => chrome.storage.local.get(['orders', 'settings']));
+const stored = async (ctx) => (await swOf(ctx)).evaluate(() => chrome.storage.local.get(['orders', 'settings', 'counts']));
 async function waitText(page, re, ms = 20000) {
   const t0 = Date.now(); let t = '';
   while (Date.now() - t0 < ms) { try { t = await panelText(page); if (re.test(t)) return t; } catch (_) {} await page.waitForTimeout(100); }
@@ -194,7 +194,9 @@ const open = async (ctx) => {
     const st = await stored(ctx);
     const removed = await w.evaluate(() => __rm);
     for (const k of ['orders', 'counts', 'notifyState']) assert.ok(removed.includes(k), `${k} 가 삭제돼야 함: ${removed}`);
-    assert.ok(Object.keys(st.orders || {}).length < ALL.length, '초기화 뒤 전부 받아져 있으면 안 됨 (진행 중 작업이 계속 저장함)');
+    assert.strictEqual(Object.keys(st.orders || {}).length, 0, '초기화 직후에는 새 페이지의 1페이지 내용도 저장·표시되지 않아야 함');
+    assert.ok(!st.counts, '알리 집계(배송 중·배송 전)도 비어야 함');
+    { const t0 = await panelText(page); assert.match(t0, /수집된 주문이 없습니다/); assert.match(t0, /수집된 주문 0건/); assert.doesNotMatch(t0, /알리 집계/); }
     assert.strictEqual(st.settings.coverage, null);
     assert.ok(!st.settings.resume, '이어받기 지점이 남으면 "이어서 불러오기"로 보인다');
     assert.ok(!st.settings.listTpl && !st.settings.detailTpl);
@@ -205,7 +207,7 @@ const open = async (ctx) => {
     reset();
     await clickShadow(page, '[data-act="loadall"]');
     await waitIdle(page);
-    assert.strictEqual(Object.keys((await stored(ctx)).orders).length, ALL.length);
+    { const a = await stored(ctx); assert.strictEqual(Object.keys(a.orders).length, ALL.length); assert.ok(a.counts && a.counts.shipped === 6, '조회를 시작하면 잡아 둔 집계도 채워짐: ' + JSON.stringify(a.counts)); }
     assert.ok(stats.listPosts >= 1);
     await ctx.close();
   });

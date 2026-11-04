@@ -11,6 +11,7 @@ const NOISE_URL = /recommend|cart\.count|cookie\.render/i;
 const state = {
   orders: {}, settings: { usdRate: null, thumbs: true, detailTpl: null, auto: false, period: '1w', includeShipping: true, coverage: null, listTpl: null, resume: null, customsLimit: 150, protectDays: 7, catOverrides: {} },
   tab: 'summary', shipFilter: 'all', moreOpen: false, open: false, loading: false, cancel: false, progress: '',
+  hold: false, held: { orders: [], counts: null },
   filter: '', captures: [], cards: [], lastUpdate: null, net: [], counts: null,
   meta: null, listAt: 0, detail: null, listResps: [], listSeen: new Set(), reqLog: [], reqSeen: new Set(), sessionIds: new Set(), knownAtStart: new Set(), lastPageOrders: [], cut: { cutoff: null, covered: false }, chain: null, endReason: '', libInfo: null, detailTplCand: null, tabResolve: null, cancelDetail: false,
   fast: { list: '', detail: '' }, paused: null, progressDetail: '', detailRerun: false
@@ -119,7 +120,16 @@ const store = {
 };
 
 /* ---------------------------- 데이터 수집 ---------------------------- */
+/** 초기화 직후에는 이 페이지가 열 때 받은 1페이지 응답이 화면·저장소에 들어오지 않도록 잡아 둔다. 사용자가 조회를 시작하면 풀어 준다. */
+function releaseHold() {
+  if (!state.hold) return;
+  state.hold = false;
+  const held = state.held; state.held = { orders: [], counts: null };
+  if (held.counts && !state.counts) state.counts = held.counts;
+  ingest(held.orders);
+}
 function ingest(list) {
+  if (state.hold) { state.held.orders.push(...list); return 0; }
   let changed = 0;
   for (const o of list) {
     if (!o || !o.id) continue;
