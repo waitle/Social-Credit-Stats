@@ -342,7 +342,7 @@ function bindEvents() {
     else if (act === 'restore') importBackup();
     else if (act === 'options') { try { chrome.runtime.sendMessage({ type: 'openOptions' }); } catch (_) {} }
     else if (act === 'debug') exportDebug();
-    else if (act === 'clear') { if (confirm('저장된 주문 통계 데이터를 모두 지울까요?')) { state.orders = {}; state.settings.coverage = null; state.knownAtStart = new Set(); store.clear(); state.progress = ''; scanDom(); renderNow(); } }
+    else if (act === 'clear') { if (confirm('저장된 주문 통계 데이터를 모두 지울까요?')) { state.cancel = true; store.clear().then(() => location.reload()); } }   // 페이지를 새로 열어야 1페이지부터 다시 시작한다 (끝까지 본 화면의 '더 없음' 상태가 남지 않도록)
   });
   root.addEventListener('input', (e) => {
     const t = e.target;

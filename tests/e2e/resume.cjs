@@ -176,6 +176,24 @@ const open = async (ctx) => {
     await ctx.close();
   });
 
+  await step('초기화하면 저장 범위·이어받기 지점도 지워져, 다시 불러오기가 처음부터 받는다', async () => {
+    reset();
+    const ctx = await fresh('p5c'); const page = await open(ctx);
+    await waitIdle(page);
+    let st = await stored(ctx);
+    assert.strictEqual(Object.keys(st.orders).length, ALL.length);
+    assert.ok(st.settings.coverage, '불러온 뒤에는 저장 범위가 있어야 함');
+    await clickShadow(page, '[data-act="more"]');
+    await clickShadow(page, '[data-act="clear"]');                       // confirm 은 자동 수락
+    reset();                                                            // 이후 요청 수만 센다
+    // 초기화하면 페이지가 새로 열리고(자동 실행) 처음부터 전부 다시 받는다
+    await page.waitForEvent('load');
+    await waitIdle(page);
+    { const a = await stored(ctx); assert.strictEqual(Object.keys(a.orders).length, ALL.length, '초기화 후 다시 전부 받아야 함: ' + JSON.stringify({ n: Object.keys(a.orders).length, cov: a.settings.coverage, posts: stats.listPosts })); }
+    assert.ok(stats.listPosts >= 1, '서버에 목록 요청을 실제로 보내야 함');
+    await ctx.close();
+  });
+
   await step('환율/관세 한도를 입력하는 동안 알림이 쏟아지지 않는다', async () => {
     reset();
     const ctx = await fresh('p6', { period: '1w' }); const page = await open(ctx);

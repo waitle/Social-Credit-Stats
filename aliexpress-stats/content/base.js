@@ -97,7 +97,16 @@ const store = {
     try { await chrome.storage.local.set({ orders: state.orders, settings: state.settings, counts: state.counts }); } catch (_) {}
   },
   save() { clearTimeout(store._t); store._t = setTimeout(() => store.flush(), 300); },
-  async clear() { try { await chrome.storage.local.remove(['orders']); } catch (_) {} }
+  /** 저장된 주문과, 그 주문이 "어디까지 불러왔는지" 알려 주는 기록(범위·이어받기 지점)을 함께 지운다.
+   *  주문만 지우고 범위를 남기면 다음 불러오기가 "이미 다 받았다"고 판단해 아무것도 받지 않는다. */
+  async clear() {
+    clearTimeout(store._t); store._t = null;
+    state.orders = {}; state.counts = null;
+    state.settings.coverage = null; state.settings.resume = null;
+    state.knownAtStart = new Set(); state.sessionIds = new Set(); state.lastPageOrders = [];
+    state.cut = { cutoff: null, covered: false }; state.chain = null; state.endReason = '';
+    try { await chrome.storage.local.remove(['orders', 'counts']); await chrome.storage.local.set({ settings: state.settings }); } catch (_) {}
+  }
 };
 
 /* ---------------------------- 데이터 수집 ---------------------------- */
