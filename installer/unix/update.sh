@@ -63,3 +63,14 @@ cp -R "$SRC" "$STAGE"
 mv "$STAGE" "$EXT_DIR"
 rm -rf -- "$OLD"
 log "업데이트 완료 ${CUR:-없음} → $NEW_VER"
+
+# 업데이터 스크립트 자신도 새 버전으로 교체한다 (그렇지 않으면 업데이터의 버그 수정이 이미 설치한 사람에게 전달되지 않는다).
+# 새 파일을 만든 뒤 mv 로 바꾸므로 실행 중인 이 스크립트(bash 가 이전 파일을 계속 읽음)가 깨지지 않는다.
+if [ -z "${AOS_SOURCE:-}" ]; then
+  INST="$(dirname "$SRC")/installer/unix"
+  for n in update.sh uninstall.sh install.sh; do
+    [ -f "$INST/$n" ] || continue
+    if [ -f "$HOME_DIR/$n" ] && cmp -s "$INST/$n" "$HOME_DIR/$n"; then continue; fi
+    cp "$INST/$n" "$HOME_DIR/$n.new" && chmod +x "$HOME_DIR/$n.new" && mv -f "$HOME_DIR/$n.new" "$HOME_DIR/$n" && log "스크립트 갱신: $n"
+  done
+fi

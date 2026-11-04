@@ -41,7 +41,14 @@
 3. 업데이터를 직접 실행해 오류를 확인합니다.
    - Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File "%LOCALAPPDATA%\AliOrderStats\update.ps1"`
    - macOS/Linux: 설치 폴더의 `update.sh`
-4. 파일이 새 버전인데 확장이 그대로면 `chrome://extensions`에서 이 확장의 새로고침(↻)을 누르세요. 개발자 모드에서 로드한 확장만 스스로 다시 로드합니다.
+4. **옛 업데이터가 설치돼 있어서 계속 안 되는 경우 (한 번만)**: 업데이터는 v2.1.2부터 자기 자신도 새 버전으로 바꾸지만, 그 전에 설치한 업데이터는 버그가 있는 채로 남아 있습니다. 아래 명령이 최신 업데이터를 받아 바로 실행합니다. 저장소를 다시 받아 설치 프로그램을 다시 실행해도 같습니다. (GitHub 캐시 때문에 푸시 직후 몇 분은 이전 파일이 보일 수 있습니다)
+   - Windows (PowerShell):
+     ```powershell
+     $d="$env:LOCALAPPDATA\AliOrderStats"; iwr -UseBasicParsing https://raw.githubusercontent.com/waitle/Social-Credit-Stats/main/installer/windows/update.ps1 -OutFile "$d\update.ps1"; powershell -NoProfile -ExecutionPolicy Bypass -File "$d\update.ps1" -Force
+     ```
+   - Linux: `D=~/.local/share/ali-order-stats; curl -fsSL https://raw.githubusercontent.com/waitle/Social-Credit-Stats/main/installer/unix/update.sh -o "$D/update.sh" && bash "$D/update.sh" --force`
+   - macOS: 위 Linux 명령에서 `D=`를 `"$HOME/Library/Application Support/AliOrderStats"`로 바꿔 실행
+5. 파일이 새 버전인데 확장이 그대로면 `chrome://extensions`에서 이 확장의 새로고침(↻)을 누르세요. 개발자 모드에서 로드한 확장만 스스로 다시 로드합니다.
 
 ## 주요 기능
 

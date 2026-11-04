@@ -49,6 +49,19 @@ try {
   & robocopy $src $ext /MIR /R:2 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null   # 파일이 잠겨 있어도 무한정 기다리지 않는다
   if ($LASTEXITCODE -ge 8) { throw "파일 복사 실패 (robocopy $LASTEXITCODE)" }
   Write-Log "업데이트 완료 $(if ($cur) { $cur } else { '없음' }) → $new"
+
+  # 업데이터 스크립트 자신도 새 버전으로 교체한다 (그렇지 않으면 업데이터의 버그 수정이 이미 설치한 사람에게 전달되지 않는다).
+  # 임시 이름으로 복사한 뒤 이름만 바꿔서, 중간에 실패해도 기존 스크립트가 깨지지 않는다.
+  if (-not $Source) {
+    $inst = Join-Path (Split-Path $src -Parent) 'installer\windows'
+    foreach ($n in 'update.ps1', 'uninstall.ps1', 'install.ps1') {
+      $from = Join-Path $inst $n; $to = Join-Path $InstallDir $n
+      if (-not (Test-Path $from)) { continue }
+      if ((Test-Path $to) -and ((Get-FileHash $from).Hash -eq (Get-FileHash $to).Hash)) { continue }
+      Copy-Item $from "$to.new" -Force; Move-Item "$to.new" $to -Force
+      Write-Log "스크립트 갱신: $n"
+    }
+  }
 } finally {
   if (Test-Path $tmp) { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
 }
