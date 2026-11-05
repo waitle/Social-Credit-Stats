@@ -10,11 +10,11 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
 const NOISE_URL = /recommend|cart\.count|cookie\.render/i;
 
 const state = {
-  orders: {}, settings: { usdRate: null, thumbs: true, detailTpl: null, trackTpl: null, auto: false, autoOpen: true, period: '1w', includeShipping: true, coverage: null, listTpl: null, resume: null, customsLimit: 150, protectDays: 7, catOverrides: {} },
+  orders: {}, settings: { usdRate: null, thumbs: true, auto: false, autoOpen: true, period: '1w', includeShipping: true, coverage: null, listTpl: null, resume: null, customsLimit: 150, protectDays: 7, catOverrides: {} },
   tab: 'summary', shipFilter: 'all', moreOpen: false, open: false, loading: false, cancel: false, progress: '',
   hold: false, held: { orders: [], counts: null },
   filter: '', captures: [], cards: [], lastUpdate: null, net: [], counts: null,
-  meta: null, listAt: 0, detail: null, listResps: [], listSeen: new Set(), reqLog: [], reqSeen: new Set(), sessionIds: new Set(), knownAtStart: new Set(), lastPageOrders: [], cut: { cutoff: null, covered: false }, chain: null, endReason: '', libInfo: null, detailTplCand: null, tabResolve: null, cancelDetail: false,
+  meta: null, listAt: 0, detail: null, listResps: [], listSeen: new Set(), reqLog: [], reqSeen: new Set(), sessionIds: new Set(), knownAtStart: new Set(), lastPageOrders: [], cut: { cutoff: null, covered: false }, chain: null, endReason: '', libInfo: null, tabResolve: null, cancelDetail: false,
   fast: { list: '', detail: '', track: '' }, detailBusy: false, paused: null, progressDetail: '', detailRerun: false
 };
 
@@ -91,6 +91,7 @@ const store = {
       }
       if (r.counts) state.counts = r.counts;
       if (r.settings) state.settings = { ...state.settings, ...r.settings };
+      delete state.settings.detailTpl; delete state.settings.trackTpl;   // 예전 버전이 저장한 요청 형식 (이제 쓰지 않음)
       if ((state.settings.defaultsV || 0) < 1) {                       // 자동 실행 기본값을 "끔"으로 바꾼 버전: 예전 기본값(켬)이 저장돼 있던 설치도 한 번만 끈다
         state.settings.auto = false; state.settings.defaultsV = 1; store.save();
       }
@@ -110,7 +111,7 @@ const store = {
   async clear() {
     store.locked = true; clearTimeout(store._t); store._t = null;
     state.orders = {}; state.counts = null;
-    Object.assign(state.settings, { coverage: null, resume: null, listTpl: null, detailTpl: null, trackTpl: null });
+    Object.assign(state.settings, { coverage: null, resume: null, listTpl: null });
     state.knownAtStart = new Set(); state.sessionIds = new Set(); state.lastPageOrders = [];
     state.cut = { cutoff: null, covered: false }; state.chain = null; state.endReason = '';
     try {

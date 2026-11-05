@@ -94,10 +94,10 @@ async function waitIdle(page, ms = 25000) {
     await waitPanel(page, /배송 현황 새로고침 완료/, 30000);
     assert.strictEqual(stats.listPosts, 1, '목록 요청 1번');
     assert.strictEqual(await clicks(page), 0, '더 보기 클릭 0번');
-    assert.strictEqual(stats.detailTabs, 1, '상세 탭은 학습용 1개만');
-    assert.ok(stats.detailPosts >= 2, '나머지 상세는 직접 호출');
-    assert.strictEqual(stats.trackTabs, 1, '배송 조회 화면도 학습용 탭은 1개만');
-    assert.ok(stats.trackPosts >= 2, '나머지 운송장은 직접 호출: ' + stats.trackPosts);
+    assert.strictEqual(stats.detailTabs, 0, '상세 탭을 열지 않음');
+    assert.ok(stats.detailPosts >= 2, '상세는 직접 호출');
+    assert.strictEqual(stats.trackTabs, 0, '배송 조회 탭을 열지 않음');
+    assert.ok(stats.trackPosts >= 2, '운송장은 직접 호출: ' + stats.trackPosts);
     assert.deepStrictEqual(errs, []);
     await page.close();
   });

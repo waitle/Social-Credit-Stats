@@ -63,7 +63,7 @@ const open = async (ctx) => {
 (async () => {
   const mock = await startMockAli({ key: fs.readFileSync(path.join(TMP, 'k.pem')), cert: fs.readFileSync(path.join(TMP, 'c.pem')), port: PORT });
   const { srv, stats, ctl } = mock;
-  const reset = () => { Object.assign(ctl, { captchaFailsPage3: 0, delayMs: 0, trackOpaque: false }); stats.trackTabs = 0; stats.trackPosts = 0; stats.pages = {}; stats.captchaHits = 0; stats.listPosts = 0; };
+  const reset = () => { Object.assign(ctl, { captchaFailsPage3: 0, delayMs: 0, directFail: false, trackEmpty: false, trackNone: false, detailCaptcha: false }); stats.trackTabs = 0; stats.trackPosts = 0; stats.detailTabs = 0; stats.detailPosts = 0; stats.pages = {}; stats.captchaHits = 0; stats.listPosts = 0; };
 
   await step('보안 인증이 떠도 빠른 모드를 유지하고, 인증이 풀리면 이어서 끝까지', async () => {
     reset(); ctl.captchaFailsPage3 = 3;
@@ -228,8 +228,8 @@ const open = async (ctx) => {
     await ctx.close();
   });
 
-  await step('배송 조회 화면의 직접 호출 형식을 못 배워도, 탭으로 모든 배송 중 주문의 운송장·도착 여부를 읽는다', async () => {
-    reset(); ctl.trackOpaque = true;
+  await step('직접 호출이 실패해도, 탭으로 예상 배송일과 모든 배송 중 주문의 운송장·도착 여부를 읽는다', async () => {
+    reset(); ctl.directFail = true;
     const ctx = await fresh('p5f', { auto: false }); const page = await open(ctx);
     await page.waitForTimeout(600);
     await clickShadow(page, '[data-act="loadall"]');
@@ -246,6 +246,52 @@ const open = async (ctx) => {
     assert.strictEqual(withNo, ships, '운송장을 모두 읽음');
     const arrived = Object.values(orders).filter((o) => o.track && /Delivered/.test(o.track.last && o.track.last.text || ''));
     assert.strictEqual(arrived.length, 1, '위치·상태가 따로 있는 이벤트에서도 도착을 인식: ' + JSON.stringify(arrived.map((o) => o.track)));
+    assert.ok(stats.detailTabs > 0, '상세도 탭으로 읽음');
+    assert.ok(Object.values(orders).some((o) => o.eta && o.etaSrc === 'detail'), '탭에서 예상 배송일을 읽음');
+    await ctx.close();
+  });
+
+  await step('직접 호출 응답에서 운송장을 못 읽으면 탭으로 읽는다 (상세는 탭을 열지 않음)', async () => {
+    reset(); ctl.trackEmpty = true;
+    const ctx = await fresh('p5g', { auto: false }); const page = await open(ctx);
+    await page.waitForTimeout(600);
+    await clickShadow(page, '[data-act="loadall"]');
+    await waitIdle(page);
+    await waitText(page, /배송 현황 새로고침 완료/, 90000);
+    assert.ok(stats.trackTabs > 0, '탭으로 대체');
+    assert.strictEqual(stats.detailTabs, 0, '상세는 직접 호출로 충분하므로 탭을 열지 않음');
+    assert.ok(Object.values((await stored(ctx)).orders).some((o) => o.track && o.track.no && o.trackVia === 'tab'), '탭에서 운송장을 읽음');
+    await ctx.close();
+  });
+
+  await step('어느 주문에서도 운송장을 못 읽으면 탭은 3개까지만, 이후 갱신에서도 다시 열지 않는다', async () => {
+    reset(); ctl.trackNone = true;
+    const ctx = await fresh('p5h', { auto: false }); const page = await open(ctx);
+    await page.waitForTimeout(600);
+    await clickShadow(page, '[data-act="loadall"]');
+    await waitText(page, /배송 현황 새로고침 완료/, 90000);              // 탭마다 내용을 기다리므로 waitIdle 시간으로는 부족하다
+    await page.waitForTimeout(800);
+    assert.strictEqual(stats.trackTabs, 3, '탭 3개에서 멈춤: ' + stats.trackTabs);
+    await page.reload(); await page.waitForTimeout(800);
+    await clickShadow(page, '[data-act="loadall"]');
+    await page.waitForTimeout(3000);
+    assert.strictEqual(stats.trackTabs, 3, '다시 열어도 탭을 또 열지 않음: ' + stats.trackTabs);
+    await ctx.close();
+  });
+
+  await step('상세 직접 호출에 보안 인증이 뜨면 탭을 열지 않고 기다렸다가 이어서 읽는다', async () => {
+    reset(); ctl.detailCaptcha = true;
+    const ctx = await fresh('p5i', { auto: false, captchaPollMs: 300, captchaTimeoutMs: 30000 }); const page = await open(ctx);
+    await page.waitForTimeout(600);
+    await clickShadow(page, '[data-act="loadall"]');
+    await waitText(page, /보안 인증이 필요합니다/, 20000);
+    assert.strictEqual(stats.detailTabs, 0, '인증 대기 중에는 탭을 열지 않음');
+    ctl.detailCaptcha = false;
+    await waitText(page, /배송 현황 새로고침 완료/, 30000);
+    assert.strictEqual(stats.detailTabs, 0);
+    assert.doesNotMatch(await panelText(page), /보안 인증이 필요합니다/);
+    await page.waitForTimeout(800);
+    assert.ok(Object.values((await stored(ctx)).orders).some((o) => o.eta && o.etaSrc === 'detail'), '인증 뒤 예상 배송일을 읽음');
     await ctx.close();
   });
 

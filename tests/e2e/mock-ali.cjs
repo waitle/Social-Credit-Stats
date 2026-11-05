@@ -43,7 +43,7 @@ function listPayload(idx) {
 function trackingPayload(id) {
   const o = ALL.find((x) => x.id === id) || ALL[0];
   const delivered = o.n === 3;
-  return { api: 'mtop.aliexpress.logistics.tracking.detail', data: {
+  return { api: 'mtop.ae.ld.querydetail', data: {
     tradeOrderId: id,
     logistics: { trackingNumber: 'LP' + String(o.n === 3 ? 0 : o.n).padStart(12, '0'), logisticsCompany: 'Cainiao', events: [
       { time: Date.now() - 3 * 86400000, desc: '출고 완료' }, (delivered ? { time: Date.now() - 86400000, location: '시흥시 경기', status: 'Delivered' } : { time: Date.now() - 86400000, desc: '통관 진행 중' })] }
@@ -86,24 +86,28 @@ setTimeout(function(){ lib.mtop.request({api:'mtop.aliexpress.trade.buyer.order.
 setTimeout(load, 400);
 </script></body></html>`;
 
+// 실제 상세·배송 조회 페이지처럼 lib.mtop.request 를 거치지 않는 prefetch 호출 (확장의 후킹으로는 요청 형식을 볼 수 없다)
+const PREFETCH = `function prefetch(api, data){ return fetch('https://acs.aliexpress.com/h5/'+api+'/1.0/?appKey=12574478&api='+api, {method:'POST', credentials:'include', headers:{'content-type':'application/x-www-form-urlencoded'}, body:'data='+encodeURIComponent(JSON.stringify(data))}).then(function(r){return r.json()}); }
+function prefetchRetry(api, data){ return prefetch(api, data).then(function(j){ return /TOKEN/.test((j.ret||[])[0]||'') ? prefetch(api, data) : j; }); }`;
+
 function detailPage(id) {
-  return `<html><body><h1>주문 상세</h1><div>주문번호:: ${id}</div><div id=x>loading…</div><script>${LIB}
-setTimeout(function(){ lib.mtop.request({api:'mtop.aliexpress.trade.buyer.order.detail', v:'1.0', data:{orderId:'${id}', lang:'ko'}, ecode:1, isSec:1})
+  return `<html><body><h1>주문 상세</h1><div>주문번호:: ${id}</div><div id=x>loading…</div><script>${LIB}${PREFETCH}
+setTimeout(function(){ prefetchRetry('mtop.aliexpress.trade.buyer.order.detail', {tradeOrderId:'${id}', fromPage:1})
   .then(function(j){ document.getElementById('x').innerHTML='<div>'+j.data.deliveryText+'</div><div>'+j.data.protection+'</div>'; }); }, 500);</script></body></html>`;
 }
 
-function trackingPage(id, opaque) {
-  // opaque: 요청 데이터에 주문번호가 그대로 들어 있지 않은 경우 (직접 호출 형식을 배울 수 없음 → 탭으로만 읽어야 함)
-  const data = opaque ? `{k:btoa('${id}')}` : `{tradeOrderId:'${id}'}`;
-  return `<html><body><h1>배송 조회</h1><div id=x>loading…</div><script>${LIB}
-setTimeout(function(){ lib.mtop.request({api:'mtop.aliexpress.logistics.tracking.detail', v:'1.0', data:${data}, ecode:1, isSec:1})
+function trackingPage(id) {
+  return `<html><body><h1>배송 조회</h1><div id=x>loading…</div><script>${LIB}${PREFETCH}
+setTimeout(function(){ prefetchRetry('mtop.ae.ld.querydetail', {tradeOrderId:'${id}', fromPage:1})
   .then(function(j){ document.getElementById('x').innerHTML='<div>운송장 번호 '+j.data.logistics.trackingNumber+'</div>'; }); }, 500);</script></body></html>`;
 }
 
 function startMockAli({ key, cert, port }) {
   const stats = { listPosts: 0, detailPosts: 0, detailTabs: 0, trackPosts: 0, trackTabs: 0, indexLoads: 0, pages: {}, captchaHits: 0 };
   // 테스트에서 조절: captchaFailsPage3 > 0 이면 그 횟수만큼, -1 이면 해제할 때까지 3페이지 요청에 보안 인증 오류를 돌려준다. delayMs 는 3페이지 응답 지연.
-  const ctl = { captchaFailsPage3: 0, delayMs: 0, trackOpaque: false };
+  // directFail: 목록 페이지에서 직접 호출하면 상세·배송 조회 API 가 실패 / trackEmpty: 직접 호출한 배송 조회 응답에 값이 없음 (둘 다 탭으로만 읽힘)
+  // trackNone: 탭에서도 운송장이 없음 / detailCaptcha: 직접 호출한 상세 API 가 보안 인증을 요구
+  const ctl = { captchaFailsPage3: 0, delayMs: 0, directFail: false, trackEmpty: false, trackNone: false, detailCaptcha: false };
   const srv = https.createServer({ key, cert }, (req, res) => {
     const u = new URL(req.url, 'https://' + req.headers.host);
     const cors = { 'Access-Control-Allow-Origin': 'https://www.aliexpress.com', 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': 'content-type' };
@@ -133,13 +137,20 @@ function startMockAli({ key, cert, port }) {
           if (idx === 3 && ctl.delayMs) return setTimeout(() => send(listPayload(idx)), ctl.delayMs);
           return send(listPayload(idx));
         }
-        if (/logistics\.tracking/.test(api)) { stats.trackPosts++; return send(trackingPayload(data.tradeOrderId || Buffer.from(data.k || '', 'base64').toString())); }
-        if (/order\.detail/.test(api)) { stats.detailPosts++; return send(detailPayload(data.orderId)); }
+        if (/ae\.ld\.querydetail|order\.detail/.test(api) && !data.tradeOrderId) return send({ api, data: {}, ret: ['FAIL_BIZ::tradeOrderId required'] });
+        if (ctl.directFail && !data.fromPage && /ae\.ld\.querydetail|order\.detail/.test(api)) return send({ api, data: {}, ret: ['FAIL_BIZ::not allowed'] });
+        if (ctl.detailCaptcha && !data.fromPage && /order\.detail/.test(api)) return send({ api, data: { url: 'https://acs.aliexpress.com/punish?x5secdata=x' }, ret: ['FAIL_SYS_USER_VALIDATE::RGV587_ERROR::验证'] });
+        if (/ae\.ld\.querydetail/.test(api)) {
+          stats.trackPosts++;
+          if (ctl.trackNone || (ctl.trackEmpty && !data.fromPage)) return send({ api, data: {}, ret: ['SUCCESS::ok'] });
+          return send(trackingPayload(data.tradeOrderId));
+        }
+        if (/order\.detail/.test(api)) { stats.detailPosts++; return send(detailPayload(data.tradeOrderId)); }
         return send({ api, data: {}, ret: ['FAIL::unknown'] });
       });
       return;
     }
-    if (u.pathname.endsWith('/tracking/index.html')) { stats.trackTabs++; res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(trackingPage(u.searchParams.get('tradeOrderId'), ctl.trackOpaque)); }
+    if (u.pathname.endsWith('/tracking/index.html')) { stats.trackTabs++; res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(trackingPage(u.searchParams.get('tradeOrderId'))); }
     if (u.pathname.endsWith('detail.html')) { stats.detailTabs++; res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(detailPage(u.searchParams.get('orderId'))); }
     stats.indexLoads++;
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });

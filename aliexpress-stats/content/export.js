@@ -21,7 +21,6 @@ function exportDebug() {
     version: 2, page: location.href, ua: navigator.userAgent, at: new Date().toISOString(),
     note: '개인정보(이름/주소/전화번호 등)가 포함됐는지 공유 전에 꼭 확인하세요.',
     counts: state.counts, meta: state.meta, fast: state.fast, libInfo: state.libInfo, period: state.settings.period, coverage: state.settings.coverage, endReason: state.endReason,
-    detailTpl: state.settings.detailTpl,
     mtopReqs: state.reqLog.map((r) => ({ api: r.api, at: r.at, opts: JSON.parse(JSON.stringify(r.opts, (k, v) => (typeof v === 'string' && v.length > 120 ? v.slice(0, 120) + `…(${v.length})` : v))) })),
     diag: diagnose(),
     netLog: state.net,

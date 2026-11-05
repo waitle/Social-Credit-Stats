@@ -17,7 +17,7 @@ const isOk = (j) => !!(j && Array.isArray(j.ret) && /^SUCCESS/i.test(j.ret[0] ||
 const errText = (r) => { const j = r && r.json; return (j && j.ret && j.ret[0]) || (j && j.error) || (j && j.message) || 'no-response'; };
 async function pool(list, n, fn) {
   const q = list.slice();
-  await Promise.all(Array.from({ length: Math.min(n, q.length) }, async () => { while (q.length && !state.cancel && !state.cancelDetail) await fn(q.shift()); }));
+  await Promise.all(Array.from({ length: Math.min(n, q.length) }, async () => { while (q.length && !state.cancelDetail) await fn(q.shift()); }));
 }
 
 /** 페이지의 lib.mtop 후킹 상태를 즉시 확인 (최대 3초 대기) */
@@ -64,11 +64,14 @@ async function waitCaptcha(again, label) {
   const limit = state.settings.captchaTimeoutMs || 5 * 60 * 1000;
   const steps = poll ? [poll] : [3000, 3000, 5000, 5000, 10000, 10000, 15000, 20000];
   const t0 = Date.now();
+  const isDetail = label === 'detail';                                     // 상세 조회는 목록과 중단 버튼·진행 문구가 따로 있다
+  const stopped = () => (isDetail ? state.cancelDetail : state.cancel);
   state.paused = { kind: 'captcha', since: t0 };
   try {
-    for (let k = 0; Date.now() - t0 < limit && !state.cancel; k++) {
+    for (let k = 0; Date.now() - t0 < limit && !stopped(); k++) {
       const left = Math.max(0, Math.round((limit - (Date.now() - t0)) / 1000));
-      state.progress = `보안 인증이 필요합니다 — 알리 페이지에서 인증을 완료하면 자동으로 이어집니다 (${left}초)`;
+      const msg = `보안 인증이 필요합니다 — 알리 페이지에서 인증을 완료하면 자동으로 이어집니다 (${left}초)`;
+      if (isDetail) state.progressDetail = msg; else state.progress = msg;
       scheduleRender();
       await sleep(captchaVisible() ? Math.min(1500, steps[0]) : steps[Math.min(k, steps.length - 1)]);
       if (captchaVisible()) continue;                                      // 인증 창이 떠 있는 동안은 요청을 보내지 않는다

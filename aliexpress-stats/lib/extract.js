@@ -507,7 +507,7 @@
       out.track = { no: n.no || o.no || null, carrier: n.carrier || o.carrier || null, last: n.last || o.last || null };
       if (n.delivered || o.delivered) out.track.delivered = true;
     }
-    if (b.trackAt) { out.trackAt = b.trackAt; out.trackV = b.trackV || out.trackV; }
+    if (b.trackAt) { out.trackAt = b.trackAt; out.trackV = b.trackV || out.trackV; out.trackVia = b.trackVia || out.trackVia; }
     if (b.trackRaw) out.trackRaw = b.trackRaw;
     if (b.payment) out.payment = b.payment;
     if (b.payAt) out.payAt = b.payAt;

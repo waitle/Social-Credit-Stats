@@ -1,7 +1,7 @@
 // 알리 주문 통계 - 주문 상세 자동 조회 (background 가 연 탭)
 // 콘텐츠 스크립트들은 같은 스코프를 공유한다 (manifest 순서대로 로드). 실제 초기화는 main.js 에서만 한다.
 'use strict';
-/** 상세 페이지에서 예상 배송일과 상세 API 요청 형식을 모아 background 로 보낸다 */
+/** 상세·배송 조회 페이지에서 읽은 값을 background 로 보낸다 */
 async function runDetailAuto() {
     const qs = new URLSearchParams(location.search);
     const orderId = qs.get('orderId') || qs.get('tradeOrderId') || '';
@@ -35,20 +35,11 @@ async function runDetailAuto() {
     }
     const rel = (res ? res.rawLines.concat(res.apiLines) : []).filter((l) => /\d/.test(l) && /(배송|도착|예상|예정|결제|운송장|송장|delivery|deliver|arriv|estimat|ship|payment|pay with|tracking)/i.test(l)).slice(0, 25);
     const head = res ? res.rawLines.slice(0, 40) : [];
-    // 배송 조회 화면은 구조를 아직 다 몰라서, 진단용으로 화면 줄·응답 문구·호출한 API 를 조금 남긴다 (디버그 파일에서 확인)
-    const trackDiag = kind === 'track' && res ? {
-      lines: res.rawLines.slice(0, 80).map((l) => String(l).slice(0, 120)),
-      api: res.apiLines.filter((l) => /(배송|배달|완료|도착|운송장|통관|출고|delivered|deliver|tracking|logistic|status)/i.test(l)).slice(0, 60).map((l) => String(l).slice(0, 160)),
-      reqs: reqLog.map((r) => ({ api: r.api, data: (() => { try { return JSON.stringify(r.opts.data).slice(0, 200); } catch (_) { return ''; } })() })).slice(0, 12)
-    } : null;
-    // 이 페이지가 호출한 mtop 상세 API 요청(데이터에 주문번호 포함)을 알려줘서, 이후 주문은 탭 없이 직접 호출하게 한다
-    const byApi = new Map();
-    for (const r of reqLog) { try { if (JSON.stringify(r.opts.data || '').includes(orderId)) byApi.set(r.api, { api: r.api, opts: r.opts }); } catch (_) {} }
-    const tpls = [...byApi.values()].slice(0, 3);
+    const trackDiag = kind === 'track' && res ? trackDiagOf(res, reqLog) : null;
     chrome.runtime.sendMessage({
       type: 'detailResult', orderId, kind,
       eta: res && res.eta, etaSrc: res && res.etaSrc, items: res ? res.items : [],
     tracking: res && res.tracking, protectEnd: res && res.protectEnd, payment: res && res.payment,
-      raw: kind === 'track' ? trackDiag : { relevant: rel, head }, tpls
+      raw: kind === 'track' ? trackDiag : { relevant: rel, head }
     });
 }
