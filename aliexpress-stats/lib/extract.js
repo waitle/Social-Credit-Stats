@@ -431,6 +431,34 @@
     return out;
   }
 
+  /**
+   * 상세 API 응답은 data.data.detail_<블록>_<번호>.fields 아래 깊은 곳에 값이 있다.
+   * - 예상 배송일: detail_product_block.fields.productVOList[].etaAndTrack.expectDeliveryDateTitle
+   * - 자동 구매 확정 시각: detail_order_status_block.fields.gmtTrigger ("수령 확인" 버튼이 있을 때, "{0} 일 남았습니다"의 기준)
+   * known: 이 구조의 응답인지 여부. 맞다면 화면도 같은 값으로 그려지므로 탭을 열어도 더 얻을 것이 없다.
+   */
+  function readDetailBlocks(jsons, ref) {
+    const etaLines = [];
+    let known = false, protectEnd = null;
+    (function walk(n, key, d) {
+      if (n == null || d > 30) return;
+      if (typeof n === 'string') {
+        if (key && KEY_ETA.test(key) && !/(deliveredTime|deliveryTime.*actual)/i.test(key)) { const t = stripHtml(n); if (t && t.length < 200) etaLines.push(t); }
+        return;
+      }
+      if (typeof n !== 'object') return;
+      if (!Array.isArray(n) && !protectEnd && Array.isArray(n.buttonVOList) && n.buttonVOList.some((b) => b && b.type === 'CONFIRM_GOODS')) {
+        const t = epochToDate(n.gmtTrigger);
+        if (t) protectEnd = toISO(t, true);
+      }
+      for (const k of Object.keys(n)) {
+        if (/^detail_/.test(k)) known = true;
+        walk(n[k], Array.isArray(n) ? key : k, d + 1);
+      }
+    })(jsons, null, 0);
+    return { eta: pickEta(etaLines, ref, true), protectEnd, known };
+  }
+
   function extractDetail(orderId, lines, captures, opts) {
     const ref = (opts && opts.ref) || new Date();
     let eta = pickEta(lines, ref, false);
@@ -450,12 +478,14 @@
         }
       } catch (_) {}
     }
-    if (!eta) { const e = pickEta(apiLines, ref, true); if (e) { eta = e; etaSrc = 'api'; } }
     const jsons = (captures || []).map((c) => parseResponseText(c.text)).filter(Boolean);
+    const blocks = readDetailBlocks(jsons, ref);
+    if (!eta && blocks.eta) { eta = blocks.eta; etaSrc = 'api'; }
+    if (!eta) { const e = pickEta(apiLines, ref, true); if (e) { eta = e; etaSrc = 'api'; } }
     const tracking = pickTracking(jsons, lines, ref, { track: !!(opts && opts.track) });
-    const protectEnd = pickProtection(lines, ref) || pickProtection(apiLines, ref);
+    const protectEnd = pickProtection(lines, ref) || blocks.protectEnd || pickProtection(apiLines, ref);
     const payment = pickPayment(jsons, lines) || pickPayment([], apiLines);
-    return { eta, etaSrc, items, tracking, protectEnd, payment, rawLines: lines.slice(0, 120), apiLines: apiLines.slice(0, 150) };
+    return { eta, etaSrc, items, tracking, protectEnd, payment, detailKnown: blocks.known, rawLines: lines.slice(0, 120), apiLines: apiLines.slice(0, 150) };
   }
 
   /** fetch 응답 텍스트(JSON / JSONP) → 객체 */

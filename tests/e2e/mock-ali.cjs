@@ -50,17 +50,23 @@ function trackingPayload(id) {
   }, ret: ['SUCCESS::ok'] };
 }
 
-function detailPayload(id) {
+function detailTexts(id) {
   const o = ALL.find((x) => x.id === id) || ALL[0];
-  const d = 7 + (o.n % 15);
+  const d = 7 + (o.n % 15), p = o.n === 0 ? 3 : 40;
+  return { o, protectDays: p, delivery: `예상 배송일: ${koMD(daysFromNow(d))} - ${koMD(daysFromNow(d + 6))}`, protection: `구매자 보호 기간 확인 ${koMD(daysFromNow(p))}` };
+}
+
+// 실제 상세 API 응답과 같은 구조 (data.data.detail_<블록>_<번호>.fields). noEta: 예상 배송일이 없는 주문
+function detailPayload(id, noEta) {
+  const { o, protectDays, delivery } = detailTexts(id);
   return {
     api: 'mtop.aliexpress.trade.buyer.order.detail',
-    data: {
-      orderId: id,
-      deliveryText: `예상 배송일: ${koMD(daysFromNow(d))} - ${koMD(daysFromNow(d + 6))}`,
-      protection: `구매자 보호 기간 확인 ${koMD(daysFromNow(o.n === 0 ? 3 : 40))}`,
-      paymentMethod: o.n % 2 ? 'PayPal' : 'Visa ****1234'
-    },
+    data: { data: {
+      detail_root_container_1: { fields: { i18nMap: { popup_order_confirm1: '상품 수령을 정말로 확인하시겠습니까?' } } },
+      detail_order_status_block_2: { fields: { buttonVOList: [{ type: 'CONFIRM_GOODS', text: '수령 확인' }], countDownPattern: '{0} 일 남았습니다', gmtTrigger: daysFromNow(protectDays).getTime(), orderId: Number(id), reminder: '{0} 후에 자동으로 배송 완료 확인 처리됩니다.', title: '배송 중' } },
+      detail_product_block_3: { fields: { productVOList: [{ etaAndTrack: { deliveryDateChangeInfo: { title: '배송 예정일' }, ...(noEta ? {} : { expectDeliveryDateTitle: delivery }), packageInfo: { trackDesc: '배송사 인계 완료' } }, itemTitle: '상품', orderLineId: id, quantity: 1 }] } },
+      detail_simple_order_info_component_4: { fields: { orderIdTitle: '주문번호:', paymentMethod: o.n % 2 ? 'PayPal' : 'Visa ****1234', paymentMethodTitle: '결제 수단', tradeOrderId: Number(id) } }
+    } },
     ret: ['SUCCESS::ok']
   };
 }
@@ -91,9 +97,10 @@ const PREFETCH = `function prefetch(api, data){ return fetch('https://acs.aliexp
 function prefetchRetry(api, data){ return prefetch(api, data).then(function(j){ return /TOKEN/.test((j.ret||[])[0]||'') ? prefetch(api, data) : j; }); }`;
 
 function detailPage(id) {
+  const t = detailTexts(id);
   return `<html><body><h1>주문 상세</h1><div>주문번호:: ${id}</div><div id=x>loading…</div><script>${LIB}${PREFETCH}
 setTimeout(function(){ prefetchRetry('mtop.aliexpress.trade.buyer.order.detail', {tradeOrderId:'${id}', fromPage:1})
-  .then(function(j){ document.getElementById('x').innerHTML='<div>'+j.data.deliveryText+'</div><div>'+j.data.protection+'</div>'; }); }, 500);</script></body></html>`;
+  .then(function(){ document.getElementById('x').innerHTML='<div>${t.delivery}</div><div>${t.protection}</div>'; }); }, 500);</script></body></html>`;
 }
 
 function trackingPage(id) {
@@ -107,7 +114,8 @@ function startMockAli({ key, cert, port }) {
   // 테스트에서 조절: captchaFailsPage3 > 0 이면 그 횟수만큼, -1 이면 해제할 때까지 3페이지 요청에 보안 인증 오류를 돌려준다. delayMs 는 3페이지 응답 지연.
   // directFail: 목록 페이지에서 직접 호출하면 상세·배송 조회 API 가 실패 / trackEmpty: 직접 호출한 배송 조회 응답에 값이 없음 (둘 다 탭으로만 읽힘)
   // trackNone: 탭에서도 운송장이 없음 / detailCaptcha: 직접 호출한 상세 API 가 보안 인증을 요구
-  const ctl = { captchaFailsPage3: 0, delayMs: 0, directFail: false, trackEmpty: false, trackNone: false, detailCaptcha: false };
+  // detailUnknown: 직접 호출한 상세 응답의 구조가 다름 (탭으로 대체) / detailNoEta: 구조는 같은데 예상 배송일이 없음 (탭을 열 필요 없음)
+  const ctl = { captchaFailsPage3: 0, delayMs: 0, directFail: false, trackEmpty: false, trackNone: false, detailCaptcha: false, detailUnknown: false, detailNoEta: false };
   const srv = https.createServer({ key, cert }, (req, res) => {
     const u = new URL(req.url, 'https://' + req.headers.host);
     const cors = { 'Access-Control-Allow-Origin': 'https://www.aliexpress.com', 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': 'content-type' };
@@ -145,7 +153,11 @@ function startMockAli({ key, cert, port }) {
           if (ctl.trackNone || (ctl.trackEmpty && !data.fromPage)) return send({ api, data: {}, ret: ['SUCCESS::ok'] });
           return send(trackingPayload(data.tradeOrderId));
         }
-        if (/order\.detail/.test(api)) { stats.detailPosts++; return send(detailPayload(data.tradeOrderId)); }
+        if (/order\.detail/.test(api)) {
+          stats.detailPosts++;
+          if (ctl.detailUnknown && !data.fromPage) return send({ api, data: { somethingNew: { title: '새 구조' } }, ret: ['SUCCESS::ok'] });
+          return send(detailPayload(data.tradeOrderId, ctl.detailNoEta));
+        }
         return send({ api, data: {}, ret: ['FAIL::unknown'] });
       });
       return;

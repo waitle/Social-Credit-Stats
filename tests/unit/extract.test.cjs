@@ -62,6 +62,35 @@ test('상세 응답: 예상 배송일, 운송장/마지막 이벤트, 보호 기
   assert.strictEqual(r.protectEnd, '2026-12-01');
 });
 
+// 실제 상세 API 응답을 정제한 구조. 값이 detail_<블록>_<번호>.fields 아래 깊은 곳에 있다
+const realDetail = (eta, buttons) => ({ data: { data: {
+  detail_root_container_1: { fields: { i18nMap: { button_delete_tips: '삭제 후 주문은 분류됩니다.' } } },
+  detail_order_status_block_2: { fields: { buttonVOList: buttons, countDownPattern: '{0} 일 남았습니다', gmtTrigger: new Date(2027, 0, 17, 10, 34).getTime(), reminder: '{0} 후에 자동으로 배송 완료 확인 처리됩니다.문제가 있는 경우 주문 후 90 일 이내에 환불/반품을 신청할 수 있습니다.', title: '배송 중' } },
+  detail_order_services_3: { fields: { data: [{ title: '구매자 보호' }, { content: '지정된 주문 보호 기간 내 반품 및 환불 가능' }] } },
+  detail_product_block_4: { fields: { productVOList: [{ etaAndTrack: { deliveryDateChangeInfo: { changeReason: '판매자 또는 택배사에서 예상 배송 시간을 제공합니다.', title: '배송 예정일' }, ...(eta ? { expectDeliveryDateTitle: eta } : {}), packageInfo: { trackDesc: '배송사 인계 완료' } }, itemTitle: '상품', orderLineId: '1123000000000002', quantity: 1 }] } },
+  detail_simple_order_info_component_5: { fields: { orderCreatTime: '2026년 11월 3일', orderShipTime: '2026년 11월 3일', paymentMethod: '네이버페이', paymentMethodTitle: '결제 수단', tradeOrderId: 1123000000000001 } }
+} }, ret: ['SUCCESS::调用成功'] });
+const confirmBtn = [{ text: '수령 확인', type: 'CONFIRM_GOODS' }];
+
+test('실제 구조의 상세 응답: 깊은 곳의 예상 배송일, 자동 확정 시각, 결제수단을 읽는다', () => {
+  const r = AES.extractDetail('1123000000000001', [], [{ url: 'x', text: JSON.stringify(realDetail('예상 배송일: 2026년 11월 24일', confirmBtn)) }], { ref: new Date(2026, 10, 5) });
+  assert.strictEqual(r.eta.end, '2026-11-24');
+  assert.strictEqual(r.etaSrc, 'api');
+  assert.strictEqual(r.payment, '네이버페이');
+  assert.strictEqual(r.protectEnd, '2027-01-17T10:34');
+  assert.strictEqual(r.detailKnown, true);
+});
+
+test('실제 구조의 상세 응답: 값이 없으면 지어내지 않는다', () => {
+  const ref = new Date(2026, 10, 5);
+  const none = AES.extractDetail('1', [], [{ url: 'x', text: JSON.stringify(realDetail(null, confirmBtn)) }], { ref });
+  assert.strictEqual(none.eta, null);                            // 주문일·발송일·"90 일 이내" 문구를 배송일로 읽지 않는다
+  assert.strictEqual(none.detailKnown, true);
+  const noBtn = AES.extractDetail('1', [], [{ url: 'x', text: JSON.stringify(realDetail('예상 배송일: 2026년 11월 24일', [])) }], { ref });
+  assert.strictEqual(noBtn.protectEnd, null);                    // 수령 확인 버튼이 없는 화면의 카운트다운은 자동 확정 시각이 아니다
+  assert.strictEqual(AES.extractDetail('1', [], [{ url: 'x', text: JSON.stringify({ data: { foo: 'bar' } }) }], { ref }).detailKnown, false);
+});
+
 test('배송 완료 시점: 상태 변화 관측 / 추적 이벤트 우선', () => {
   let o = AES.mergeOrder(null, { id: '1', status: 'shipping', source: 'api' });
   o = AES.mergeOrder(o, { id: '1', status: 'delivered', source: 'api' });

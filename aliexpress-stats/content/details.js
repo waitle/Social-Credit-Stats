@@ -119,7 +119,8 @@ async function fetchDetailsOnce(force) {
   state.progressDetail = `배송 현황 새로고침 중… 0/${total}`; render();
   try {
     // 환불 주문은 결제수단이 없어도 한 번 읽은 것으로 친다 (탭을 열지 않으므로)
-    const { rest, captcha } = await runDirect('detail', ids, (id, res) => extra.has(id) || !!res.eta, (id, r) => applyDetail(id, r.res), bump);
+    // 응답 구조를 아는데 날짜가 없으면 화면에도 없으므로 탭을 열지 않는다. 구조가 바뀐 응답만 탭으로 넘긴다.
+    const { rest, captcha } = await runDirect('detail', ids, (id, res) => extra.has(id) || !!res.eta || res.detailKnown, (id, r) => applyDetail(id, r.res), bump);
     const tabs = rest.filter((id) => !extra.has(id));
     for (const id of rest) if (extra.has(id)) { bump(); if (!captcha) ingest([{ id, source: 'detail', payAt: Date.now() }]); }   // 호출이 실패해도 목록 페이지마다 다시 부르지 않게 시각을 남긴다
     if (tabs.length && !state.cancelDetail && !captcha) await tabFetch(tabs);

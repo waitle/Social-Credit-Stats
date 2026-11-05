@@ -63,7 +63,7 @@ const open = async (ctx) => {
 (async () => {
   const mock = await startMockAli({ key: fs.readFileSync(path.join(TMP, 'k.pem')), cert: fs.readFileSync(path.join(TMP, 'c.pem')), port: PORT });
   const { srv, stats, ctl } = mock;
-  const reset = () => { Object.assign(ctl, { captchaFailsPage3: 0, delayMs: 0, directFail: false, trackEmpty: false, trackNone: false, detailCaptcha: false }); stats.trackTabs = 0; stats.trackPosts = 0; stats.detailTabs = 0; stats.detailPosts = 0; stats.pages = {}; stats.captchaHits = 0; stats.listPosts = 0; };
+  const reset = () => { Object.assign(ctl, { captchaFailsPage3: 0, delayMs: 0, directFail: false, trackEmpty: false, trackNone: false, detailCaptcha: false, detailUnknown: false, detailNoEta: false }); stats.trackTabs = 0; stats.trackPosts = 0; stats.detailTabs = 0; stats.detailPosts = 0; stats.pages = {}; stats.captchaHits = 0; stats.listPosts = 0; };
 
   await step('보안 인증이 떠도 빠른 모드를 유지하고, 인증이 풀리면 이어서 끝까지', async () => {
     reset(); ctl.captchaFailsPage3 = 3;
@@ -261,6 +261,34 @@ const open = async (ctx) => {
     assert.ok(stats.trackTabs > 0, '탭으로 대체');
     assert.strictEqual(stats.detailTabs, 0, '상세는 직접 호출로 충분하므로 탭을 열지 않음');
     assert.ok(Object.values((await stored(ctx)).orders).some((o) => o.track && o.track.no && o.trackVia === 'tab'), '탭에서 운송장을 읽음');
+    await ctx.close();
+  });
+
+  await step('상세 응답에 예상 배송일이 없는 주문은 탭을 열지 않는다', async () => {
+    reset(); ctl.detailNoEta = true;
+    const ctx = await fresh('p5n', { auto: false }); const page = await open(ctx);
+    await page.waitForTimeout(600);
+    await clickShadow(page, '[data-act="loadall"]');
+    await waitText(page, /배송 현황 새로고침 완료/, 90000);
+    await page.waitForTimeout(800);
+    assert.ok(stats.detailPosts > 0, '직접 호출함');
+    assert.strictEqual(stats.detailTabs, 0, '탭을 열지 않음: ' + stats.detailTabs);
+    const orders = Object.values((await stored(ctx)).orders).filter((o) => o.detailAt);
+    assert.ok(orders.length > 0, '읽은 시각을 남겨 바로 다시 읽지 않음');
+    assert.ok(orders.every((o) => !o.eta || o.etaSrc !== 'detail'), '없는 날짜를 만들어 내지 않음');
+    assert.ok(orders.some((o) => o.payment), '같은 응답의 결제수단은 반영');
+    await ctx.close();
+  });
+
+  await step('상세 응답 구조가 바뀌면 탭으로 읽는다', async () => {
+    reset(); ctl.detailUnknown = true;
+    const ctx = await fresh('p5u', { auto: false }); const page = await open(ctx);
+    await page.waitForTimeout(600);
+    await clickShadow(page, '[data-act="loadall"]');
+    await waitText(page, /배송 현황 새로고침 완료/, 90000);
+    await page.waitForTimeout(800);
+    assert.ok(stats.detailTabs > 0, '탭으로 대체');
+    assert.ok(Object.values((await stored(ctx)).orders).some((o) => o.eta && o.etaSrc === 'detail'), '탭에서 예상 배송일을 읽음');
     await ctx.close();
   });
 
