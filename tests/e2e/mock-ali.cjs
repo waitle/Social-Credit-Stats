@@ -39,6 +39,17 @@ function listPayload(idx) {
   return { api: 'mtop.aliexpress.trade.buyer.order.list', data: { data, linkage: { common: { queryParams: 'QP' + idx + '^^$$AbC+/=', submitParams: 'SP' + idx }, signature: 'SIG' + idx } }, ret: ['SUCCESS::调用成功'] };
 }
 
+// 배송 조회 화면 API: 0번과 3번 주문은 같은 운송장(합배송), 3번은 이미 배달 완료 이벤트(수령 확인 전)
+function trackingPayload(id) {
+  const o = ALL.find((x) => x.id === id) || ALL[0];
+  const delivered = o.n === 3;
+  return { api: 'mtop.aliexpress.logistics.tracking.detail', data: {
+    tradeOrderId: id,
+    logistics: { trackingNumber: 'LP' + String(o.n === 3 ? 0 : o.n).padStart(12, '0'), logisticsCompany: 'Cainiao', events: [
+      { time: Date.now() - 3 * 86400000, desc: '출고 완료' }, { time: Date.now() - 86400000, desc: delivered ? 'Delivered' : '통관 진행 중' }] }
+  }, ret: ['SUCCESS::ok'] };
+}
+
 function detailPayload(id) {
   const o = ALL.find((x) => x.id === id) || ALL[0];
   const d = 7 + (o.n % 15);
@@ -48,10 +59,7 @@ function detailPayload(id) {
       orderId: id,
       deliveryText: `예상 배송일: ${koMD(daysFromNow(d))} - ${koMD(daysFromNow(d + 6))}`,
       protection: `구매자 보호 기간 확인 ${koMD(daysFromNow(o.n === 0 ? 3 : 40))}`,
-      // 0번과 3번 주문은 같은 운송장(합배송)
-      paymentMethod: o.n % 2 ? 'PayPal' : 'Visa ****1234',
-      logistics: { trackingNumber: 'LP' + String(o.n === 3 ? 0 : o.n).padStart(12, '0'), logisticsCompany: 'Cainiao', events: [
-        { time: Date.now() - 2 * 86400000, desc: '출고 완료' }, { time: Date.now() - 86400000, desc: '통관 진행 중' }] }
+      paymentMethod: o.n % 2 ? 'PayPal' : 'Visa ****1234'
     },
     ret: ['SUCCESS::ok']
   };
@@ -84,8 +92,14 @@ setTimeout(function(){ lib.mtop.request({api:'mtop.aliexpress.trade.buyer.order.
   .then(function(j){ document.getElementById('x').innerHTML='<div>'+j.data.deliveryText+'</div><div>'+j.data.protection+'</div>'; }); }, 500);</script></body></html>`;
 }
 
+function trackingPage(id) {
+  return `<html><body><h1>배송 조회</h1><div id=x>loading…</div><script>${LIB}
+setTimeout(function(){ lib.mtop.request({api:'mtop.aliexpress.logistics.tracking.detail', v:'1.0', data:{tradeOrderId:'${id}'}, ecode:1, isSec:1})
+  .then(function(j){ document.getElementById('x').innerHTML='<div>운송장 번호 '+j.data.logistics.trackingNumber+'</div>'; }); }, 500);</script></body></html>`;
+}
+
 function startMockAli({ key, cert, port }) {
-  const stats = { listPosts: 0, detailPosts: 0, detailTabs: 0, indexLoads: 0, pages: {}, captchaHits: 0 };
+  const stats = { listPosts: 0, detailPosts: 0, detailTabs: 0, trackPosts: 0, trackTabs: 0, indexLoads: 0, pages: {}, captchaHits: 0 };
   // 테스트에서 조절: captchaFailsPage3 > 0 이면 그 횟수만큼, -1 이면 해제할 때까지 3페이지 요청에 보안 인증 오류를 돌려준다. delayMs 는 3페이지 응답 지연.
   const ctl = { captchaFailsPage3: 0, delayMs: 0 };
   const srv = https.createServer({ key, cert }, (req, res) => {
@@ -117,11 +131,13 @@ function startMockAli({ key, cert, port }) {
           if (idx === 3 && ctl.delayMs) return setTimeout(() => send(listPayload(idx)), ctl.delayMs);
           return send(listPayload(idx));
         }
+        if (/logistics\.tracking/.test(api)) { stats.trackPosts++; return send(trackingPayload(data.tradeOrderId)); }
         if (/order\.detail/.test(api)) { stats.detailPosts++; return send(detailPayload(data.orderId)); }
         return send({ api, data: {}, ret: ['FAIL::unknown'] });
       });
       return;
     }
+    if (u.pathname.endsWith('/tracking/index.html')) { stats.trackTabs++; res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(trackingPage(u.searchParams.get('tradeOrderId'))); }
     if (u.pathname.endsWith('detail.html')) { stats.detailTabs++; res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(detailPage(u.searchParams.get('orderId'))); }
     stats.indexLoads++;
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });

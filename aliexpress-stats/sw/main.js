@@ -28,7 +28,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (!sender.tab) return;
       let origin = 'https://www.aliexpress.com';
       try { origin = new URL(sender.tab.url).origin; } catch (_) {}
-      runDetails(sender.tab.id, sender.tab.windowId, origin, msg.orderIds || []);
+      runDetails(sender.tab.id, sender.tab.windowId, origin, msg.orderIds || [], msg.kind);
       sendResponse({ ok: true });
       return;
     }

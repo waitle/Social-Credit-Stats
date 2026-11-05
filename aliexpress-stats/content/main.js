@@ -39,7 +39,7 @@ async function runListAuto() {
   while (!state.listAt && Date.now() - t0 < 15000) await sleep(100);
   try { await loadAll({ auto: true, background: true }); } catch (_) {}
   await sleep(300);
-  for (let i = 0; i < 600 && state.detail; i++) await sleep(200);   // 예상 배송일 조회 완료 대기 (최대 2분)
+  for (let i = 0; i < 600 && (state.detail || state.detailBusy); i++) await sleep(200);   // 배송 현황 새로고침 완료 대기 (최대 2분)
   await store.flush();
   try { chrome.runtime.sendMessage({ type: 'bgRefreshDone', orders: Object.keys(state.orders).length }); } catch (_) {}
 }

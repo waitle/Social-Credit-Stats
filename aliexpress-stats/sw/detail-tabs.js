@@ -3,9 +3,11 @@ const waiters = new Map();   // tabId -> resolve
 const cancelled = new Set(); // listTabId
 const running = new Set();   // listTabId
 
-function fetchOne(origin, windowId, orderId) {
+function fetchOne(origin, windowId, orderId, kind) {
   return new Promise((resolve) => {
-    const url = `${origin}/p/order/detail.html?orderId=${orderId}&aesAuto=1`;
+    const url = kind === 'track'
+      ? `${origin}/p/tracking/index.html?_addShare=no&_login=yes&tradeOrderId=${orderId}&aesAuto=1`     // 주문 목록의 "배송 조회" 버튼이 여는 화면
+      : `${origin}/p/order/detail.html?orderId=${orderId}&aesAuto=1`;
     chrome.tabs.create({ url, active: false, windowId }, (tab) => {
       if (chrome.runtime.lastError || !tab) { resolve({ orderId, error: String(chrome.runtime.lastError && chrome.runtime.lastError.message) }); return; }
       let done = false;
@@ -21,7 +23,7 @@ function fetchOne(origin, windowId, orderId) {
   });
 }
 
-async function runDetails(listTabId, windowId, origin, orderIds) {
+async function runDetails(listTabId, windowId, origin, orderIds, kind) {
   if (running.has(listTabId)) return;
   running.add(listTabId); cancelled.delete(listTabId);
   const queue = orderIds.slice();
@@ -32,9 +34,9 @@ async function runDetails(listTabId, windowId, origin, orderIds) {
   const worker = async () => {
     while (queue.length && !cancelled.has(listTabId)) {
       const id = queue.shift();
-      const res = await fetchOne(origin, windowId, id);
+      const res = await fetchOne(origin, windowId, id, kind);
       done++;
-      send({ ...res, type: 'detail' });
+      send({ ...res, type: 'detail', kind: kind || 'detail' });
       send({ type: 'detailProgress', done, total });
     }
   };

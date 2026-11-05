@@ -39,7 +39,7 @@ async function waitText(page, re, ms = 20000) {
   while (Date.now() - t0 < ms) { try { t = await panelText(page); if (re.test(t)) return t; } catch (_) {} await page.waitForTimeout(100); }
   throw new Error(`패널에 ${re} 가 나타나지 않음\n${t.slice(-500)}`);
 }
-const busy = (t) => /불러오는 중|확인 중…|조회 중…|이어서 불러오는 중|보안 인증이 필요합니다 — /.test(t);
+const busy = (t) => /불러오는 중|확인 중…|조회 중…|새로고침 중…|이어서 불러오는 중|보안 인증이 필요합니다 — /.test(t);
 async function waitIdle(page, ms = 25000) {
   const t0 = Date.now(); let t = '';
   while (Date.now() - t0 < ms) { try { t = await panelText(page); if (!busy(t) && /저장됨|완료|중단/.test(t)) return t; } catch (_) {} await page.waitForTimeout(100); }

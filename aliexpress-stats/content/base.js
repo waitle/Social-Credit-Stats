@@ -2,19 +2,20 @@
 // 콘텐츠 스크립트들은 같은 스코프를 공유한다 (manifest 순서대로 로드). 실제 초기화는 main.js 에서만 한다.
 'use strict';
 const DETAIL_PATH = /\/p\/order\/detail/i.test(location.pathname);
-const DETAIL_AUTO = DETAIL_PATH && /[?&]aesAuto=1/.test(location.search);    // 백그라운드 탭: 예상 배송일 학습
+const TRACK_PATH = /\/p\/tracking\//i.test(location.pathname);                       // "배송 조회" 화면
+const DETAIL_AUTO = (DETAIL_PATH || TRACK_PATH) && /[?&]aesAuto=1/.test(location.search);    // 백그라운드 탭: 상세/배송 조회 화면에서 예상 배송일·운송장 읽기
 const LIST_AUTO = /\/p\/order\/index/i.test(location.pathname) && /[?&]aesAuto=list/.test(location.search);   // 백그라운드 탭: 자동 갱신
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 const NOISE_URL = /recommend|cart\.count|cookie\.render/i;
 
 const state = {
-  orders: {}, settings: { usdRate: null, thumbs: true, detailTpl: null, auto: false, autoOpen: true, period: '1w', includeShipping: true, coverage: null, listTpl: null, resume: null, customsLimit: 150, protectDays: 7, catOverrides: {} },
+  orders: {}, settings: { usdRate: null, thumbs: true, detailTpl: null, trackTpl: null, auto: false, autoOpen: true, period: '1w', includeShipping: true, coverage: null, listTpl: null, resume: null, customsLimit: 150, protectDays: 7, catOverrides: {} },
   tab: 'summary', shipFilter: 'all', moreOpen: false, open: false, loading: false, cancel: false, progress: '',
   hold: false, held: { orders: [], counts: null },
   filter: '', captures: [], cards: [], lastUpdate: null, net: [], counts: null,
   meta: null, listAt: 0, detail: null, listResps: [], listSeen: new Set(), reqLog: [], reqSeen: new Set(), sessionIds: new Set(), knownAtStart: new Set(), lastPageOrders: [], cut: { cutoff: null, covered: false }, chain: null, endReason: '', libInfo: null, detailTplCand: null, tabResolve: null, cancelDetail: false,
-  fast: { list: '', detail: '' }, paused: null, progressDetail: '', detailRerun: false
+  fast: { list: '', detail: '', track: '' }, detailBusy: false, paused: null, progressDetail: '', detailRerun: false
 };
 
 /* ---------------------------- 조회 기간 / 저장된 범위(coverage) ---------------------------- */
@@ -109,7 +110,7 @@ const store = {
   async clear() {
     store.locked = true; clearTimeout(store._t); store._t = null;
     state.orders = {}; state.counts = null;
-    Object.assign(state.settings, { coverage: null, resume: null, listTpl: null, detailTpl: null });
+    Object.assign(state.settings, { coverage: null, resume: null, listTpl: null, detailTpl: null, trackTpl: null });
     state.knownAtStart = new Set(); state.sessionIds = new Set(); state.lastPageOrders = [];
     state.cut = { cutoff: null, covered: false }; state.chain = null; state.endReason = '';
     try {

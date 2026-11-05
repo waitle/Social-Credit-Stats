@@ -49,7 +49,7 @@ async function waitPanel(page, re, ms = 20000) {
   while (Date.now() - t0 < ms) { try { t = await panelText(page); if (re.test(t)) return t; } catch (_) {} await page.waitForTimeout(200); }
   throw new Error(`패널에 ${re} 가 나타나지 않음\n${t.slice(0, 600)}`);
 }
-const idle = (t) => /(목록|추가분 확인) (완료|빠른)|취소됨/.test(t) && !/불러오는 중|확인 중…|조회 중…/.test(t);
+const idle = (t) => /(목록|추가분 확인) (완료|빠른)|취소됨/.test(t) && !/불러오는 중|확인 중…|조회 중…|새로고침 중…/.test(t);
 async function waitIdle(page, ms = 25000) {
   const t0 = Date.now(); let t = '';
   while (Date.now() - t0 < ms) { try { t = await panelText(page); if (idle(t)) return t; } catch (_) {} await page.waitForTimeout(200); }
@@ -78,7 +78,7 @@ async function waitIdle(page, ms = 25000) {
     assert.ok(stats.listPosts <= 1, '페이지 자신의 1페이지 요청 외에 자동 조회가 없어야 함: ' + stats.listPosts);
     assert.strictEqual(stats.detailPosts + stats.detailTabs, 0, '예상 배송일을 자동으로 조회하면 안 됨');
     const t = await waitPanel(page, /수집된 주문/);
-    assert.doesNotMatch(t, /불러오는 중|조회 중|저장됨/);
+    assert.doesNotMatch(t, /불러오는 중|조회 중|새로고침 중|저장됨/);
     await shadowClick(page, '[data-act="more"]');
     assert.strictEqual(await page.evaluate(() => document.getElementById('aes-host').shadowRoot.querySelector('[data-input="auto"]').checked), false);
     await page.close();
@@ -91,11 +91,13 @@ async function waitIdle(page, ms = 25000) {
   await step('첫 접속: 기본 1주일, 클릭 없이 1페이지 + 예상 배송일 직접 호출', async () => {
     const { page, errs } = await openIndex();
     await waitIdle(page);
-    await waitPanel(page, /예상 배송일 조회 완료/, 30000);
+    await waitPanel(page, /배송 현황 새로고침 완료/, 30000);
     assert.strictEqual(stats.listPosts, 1, '목록 요청 1번');
     assert.strictEqual(await clicks(page), 0, '더 보기 클릭 0번');
     assert.strictEqual(stats.detailTabs, 1, '상세 탭은 학습용 1개만');
     assert.ok(stats.detailPosts >= 2, '나머지 상세는 직접 호출');
+    assert.strictEqual(stats.trackTabs, 1, '배송 조회 화면도 학습용 탭은 1개만');
+    assert.ok(stats.trackPosts >= 2, '나머지 운송장은 직접 호출: ' + stats.trackPosts);
     assert.deepStrictEqual(errs, []);
     await page.close();
   });
@@ -114,10 +116,11 @@ async function waitIdle(page, ms = 25000) {
     assert.match(s, /보호 D-3/);
     assert.match(s, /합배송 1묶음/);                                 // 0번·3번 주문이 같은 운송장
     assert.match(s, /합배송 2건/);
+    assert.match(s, /수령 확인 대기/);                              // 3번: 주문은 배송 중, 조회상 도착
     assert.match(s, /Visa \*\*\*\*1234/);                              // 상세에서 읽은 결제수단
     await shadowClick(page, '[data-tab="refunds"]');
-    const rf = await waitPanel(page, /환불/);
-    assert.match(rf, /Visa \*\*\*\*1234|PayPal/, '환불 목록에도 결제수단');
+    const rf = await waitPanel(page, /결제수단/);
+    assert.match(rf, /결제수단\s+(Visa|PayPal)/, '환불 목록에도 결제수단: ' + rf.slice(-400));
     await page.close();
   });
 

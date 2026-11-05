@@ -187,8 +187,11 @@
 
     // 진행 중 배송: 예상 도착일은 주문 상세 페이지의 값만 사용 (추정하지 않음)
     const inProgress = [];
+    // 주문 상태는 아직 "배송 중"인데 배송 조회(트래킹)의 마지막 이벤트가 배달 완료인 주문: 도착했지만 수령 확인(배송 완료 확인)을 누르기 전
+    const arrived = (o) => o.cls === 'shipping' && !!(o.track && o.track.last && AES.DELIVERED_EVENT.test(o.track.last.text || ''));
     for (const o of all) {
       if (o.cls !== 'pending_ship' && o.cls !== 'shipping') continue;
+      if (arrived(o)) continue;
       const items = o.items && o.items.length ? o.items : [{ title: '(상품명 확인 불가)', qty: 1 }];
       for (const it of items) {
         if (isTicket(it.title)) continue;
@@ -209,12 +212,13 @@
     inProgress.sort((a, b) => ((a.etaEnd || '9999') < (b.etaEnd || '9999') ? -1 : (a.etaEnd || '9999') > (b.etaEnd || '9999') ? 1 : 0));
     inProgress.forEach((r) => delete r._s);
 
-    // 배송 완료된 주문 (조회 기간 안의 주문)
+    // 배송 완료: 주문 상태가 "배송 중"이면서 배송 조회상 이미 도착한 주문만.
+    // 주문 상태가 "완료"인 주문은 사용자가 직접 수령 확인을 누른 것이므로 배송 현황에 넣지 않는다 (구매 내역에는 그대로 있음)
     const delivered = [];
     for (const o of all) {
-      if (o.cls !== 'delivered') continue;
+      if (!arrived(o)) continue;
       const items = o.items && o.items.length ? o.items : [{ title: '(상품명 확인 불가)', qty: 1 }];
-      for (const it of items) if (!isTicket(it.title)) delivered.push({ orderId: o.id, title: it.title, qty: it.qty || 1, image: it.image || '', url: it.url || '', status: 'delivered', orderDate: o.date, deliveredAt: o.deliveredAt || null, track: o.track || null, payment: o.payment || '' });
+      for (const it of items) if (!isTicket(it.title)) delivered.push({ orderId: o.id, title: it.title, qty: it.qty || 1, image: it.image || '', url: it.url || '', status: 'delivered', statusText: o.statusText, orderDate: o.date, deliveredAt: (o.track.last && o.track.last.time) || o.deliveredAt || null, track: o.track || null, payment: o.payment || '', awaitingConfirm: true });
     }
     delivered.sort((a, b) => ((b.orderDate || '') > (a.orderDate || '') ? 1 : (b.orderDate || '') < (a.orderDate || '') ? -1 : 0));
 

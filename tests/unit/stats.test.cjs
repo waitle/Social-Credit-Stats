@@ -86,7 +86,7 @@ test('합배송: 같은 운송장 번호의 서로 다른 주문을 묶는다', 
   const map = {
     a: { id: 'a', status: 'shipping', date: '2026-10-30', total: { amount: 5000, currency: 'KRW' }, track: tr('LP00112233445'), payment: 'PayPal', items: [it('a1', '케이블 A')] },
     b: { id: 'b', status: 'shipping', date: '2026-10-31', total: { amount: 6000, currency: 'KRW' }, track: tr('lp00112233445'), items: [it('b1', '케이블 B'), it('b2', '케이스 B')] },
-    c: { id: 'c', status: 'delivered', date: '2026-10-20', total: { amount: 7000, currency: 'KRW' }, track: tr('LP00112233445'), items: [it('c1', '이전 주문')] },
+    c: { id: 'c', status: 'shipping', date: '2026-10-20', total: { amount: 7000, currency: 'KRW' }, track: { no: 'LP00112233445', carrier: 'Cainiao', last: { text: 'Delivered', time: '2026-11-01T10:00' } }, items: [it('c1', '이전 주문')] },   // 도착(수령 확인 전)도 같은 묶음
     d: { id: 'd', status: 'shipping', date: '2026-10-31', total: { amount: 8000, currency: 'KRW' }, track: tr('LP99999999999'), items: [it('d1', '단독')] },
     e: { id: 'e', status: 'shipping', date: '2026-10-31', total: { amount: 9000, currency: 'KRW' }, items: [it('e1', '운송장 없음')] }
   };
@@ -100,4 +100,22 @@ test('합배송: 같은 운송장 번호의 서로 다른 주문을 묶는다', 
   // 한 주문 안의 여러 상품이 같은 운송장인 것은 합배송이 아니다
   const one = { x: { id: 'x', status: 'shipping', date: '2026-10-31', track: tr('LP55555555555'), items: [it('x1', 'a'), it('x2', 'b')] } };
   assert.strictEqual(AES.computeStats(one, { now }).shipGroups.length, 0);
+});
+
+test('배송 완료 기준: 주문 상태 "완료"는 배송 현황에서 제외, 배송 중이면서 조회상 도착한 것만 배송 완료', () => {
+  const it = (id, title) => ({ id, title, qty: 1 });
+  const ev = (text) => ({ no: 'LP12345678901', carrier: 'Cainiao', last: { text, time: '2026-11-01T10:00' } });
+  const map = {
+    a: { id: 'a', status: 'delivered', date: '2026-10-20', total: { amount: 1000, currency: 'KRW' }, track: ev('Delivered'), items: [it('a1', '내가 수령 확인한 상품')] },
+    b: { id: 'b', status: 'shipping', date: '2026-10-25', total: { amount: 2000, currency: 'KRW' }, track: ev('배송 완료'), items: [it('b1', '도착했지만 확인 전')] },
+    c: { id: 'c', status: 'shipping', date: '2026-10-25', total: { amount: 3000, currency: 'KRW' }, track: ev('통관 진행 중'), items: [it('c1', '배송 중')] },
+    d: { id: 'd', status: 'shipping', date: '2026-10-25', total: { amount: 4000, currency: 'KRW' }, track: ev('Assigned to courier'), items: [it('d1', '기사 배정')] },
+    e: { id: 'e', status: 'shipping', date: '2026-10-25', total: { amount: 5000, currency: 'KRW' }, items: [it('e1', '조회 정보 없음')] }
+  };
+  const s = AES.computeStats(map, { now });
+  assert.deepStrictEqual(s.delivered.map((r) => r.title), ['도착했지만 확인 전']);
+  assert.strictEqual(s.delivered[0].awaitingConfirm, true);
+  assert.deepStrictEqual(s.inProgress.map((r) => r.title).sort(), ['기사 배정', '배송 중', '조회 정보 없음']);
+  assert.strictEqual(s.orderCount, 5);                                                       // 구매 내역·지출에는 모두 포함
+  assert.strictEqual(s.deliveredItems, 1);
 });

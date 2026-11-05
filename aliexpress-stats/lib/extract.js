@@ -172,7 +172,7 @@
   const KEY_TRACKNO = /^(trackingNumber|trackingNo|trackNo|logisticsNo|logisticsNumber|mailNo|waybillNo|expressNo|trackingCode)$/i;
   const KEY_CARRIER = /^(logisticsCompany|logisticsCompanyName|carrierName|carrier|logisticsServiceName|serviceName|companyName|logisticsName|deliveryProviderName)$/i;
   const TRACK_LABEL = /(운송장|송장\s*번호|tracking\s*(no\.?|number|#|code)|트래킹\s*번호)/i;
-  const DELIVERED_EVENT = /(배달\s*완료|배송\s*완료|수령\s*완료|delivered|signed|received by)/i;
+  const DELIVERED_EVENT = /(배달\s*완료|배송\s*완료|수령\s*완료|(?<!not\s)(?<!un)\bdelivered\b|\bsigned\b|received by)/i;   // assigned / undelivered 같은 단어에 걸리지 않게
 
   function epochToDate(v) {
     const n = Number(v);
@@ -477,7 +477,9 @@
     if (b.store && !(keepA && a.store)) out.store = b.store;
     if (b.protectEnd) out.protectEnd = b.protectEnd;
     if (b.track) out.track = b.track;
+    if (b.trackAt) out.trackAt = b.trackAt;
     if (b.payment) out.payment = b.payment;
+    if (b.payAt) out.payAt = b.payAt;
     // 배송 완료 시점: 추적 이벤트의 배달 완료 시간 > 상태가 배송 완료로 바뀐 것을 처음 본 시점
     const tl = out.track && out.track.last;
     if (tl && tl.time && DELIVERED_EVENT.test(tl.text || '') && out.deliveredSrc !== 'tracking') { out.deliveredAt = tl.time; out.deliveredSrc = 'tracking'; }

@@ -3,7 +3,9 @@
 'use strict';
 /** 상세 페이지에서 예상 배송일과 상세 API 요청 형식을 모아 background 로 보낸다 */
 async function runDetailAuto() {
-    const orderId = new URLSearchParams(location.search).get('orderId') || '';
+    const qs = new URLSearchParams(location.search);
+    const orderId = qs.get('orderId') || qs.get('tradeOrderId') || '';
+    const kind = TRACK_PATH ? 'track' : 'detail';
     const caps = [], seen = new Set();
     const reqLog = [], reqSeen = new Set();
     window.addEventListener('message', (e) => {
@@ -20,6 +22,11 @@ async function runDetailAuto() {
     while (Date.now() - t0 < 22000) {
       await sleep(600);
       res = AES.extractDetail(orderId, getLines(), caps, { ref: new Date() });
+      if (kind === 'track') {                                          // 배송 조회 화면: 운송장 번호를 읽으면 끝, 데이터가 오지 않으면 일정 시간 뒤 포기
+        if (res.tracking && res.tracking.no) break;
+        if (caps.length || getLines().length > 5) { loadedSince = loadedSince || Date.now(); if (Date.now() - loadedSince > 8000) break; }
+        continue;
+      }
       if (res.eta) break;
       if (getLines().some((l) => l.includes(orderId))) {               // 페이지는 떴는데 예상 배송일이 없는 경우
         loadedSince = loadedSince || Date.now();
@@ -33,7 +40,7 @@ async function runDetailAuto() {
     for (const r of reqLog) { try { if (JSON.stringify(r.opts.data || '').includes(orderId)) byApi.set(r.api, { api: r.api, opts: r.opts }); } catch (_) {} }
     const tpls = [...byApi.values()].slice(0, 3);
     chrome.runtime.sendMessage({
-      type: 'detailResult', orderId,
+      type: 'detailResult', orderId, kind,
       eta: res && res.eta, etaSrc: res && res.etaSrc, items: res ? res.items : [],
     tracking: res && res.tracking, protectEnd: res && res.protectEnd, payment: res && res.payment,
       raw: { relevant: rel, head }, tpls

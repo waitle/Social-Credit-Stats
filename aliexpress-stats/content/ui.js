@@ -105,6 +105,7 @@ label.st input{width:70px;padding:3px 6px;border:1px solid var(--bd);border-radi
 .grp .gh span:last-child{color:var(--mu);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .grp a{display:block;font-size:12px;color:var(--fg);text-decoration:none;padding:3px 0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .grp a:hover{text-decoration:underline}
+.sub.pay{margin-top:2px;font-size:12px}
 .tag.blue{background:#dbeafe;color:#1d4ed8}
 .trk{color:var(--mu);font-size:12px;margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .prow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;border-bottom:1px solid var(--bd)}
@@ -206,7 +207,7 @@ function viewShipping(s) {
       ${thumb(r.image)}
       <div class="m">
         <div class="ti">${esc(r.title)}</div>
-        <div class="sub">${badge(r.status)}${r.qty > 1 ? `${r.qty}개 · ` : ''}주문일 ${fmtDate(r.orderDate)}${r.groupSize ? `<span class="tag blue" title="같은 운송장으로 함께 오는 주문">합배송 ${r.groupSize}건</span>` : ''}${paymentTag(r.payment)}${protectTag(r)}${r.deliveredAt ? ` · 도착 ${fmtShort(r.deliveredAt)}` : ''}</div>
+        <div class="sub">${badge(r.status)}${r.qty > 1 ? `${r.qty}개 · ` : ''}주문일 ${fmtDate(r.orderDate)}${r.awaitingConfirm ? '<span class="tag blue" title="배송 조회상 도착했지만 아직 \'배송 완료 확인\'을 누르지 않은 주문">수령 확인 대기</span>' : ''}${r.groupSize ? `<span class="tag blue" title="같은 운송장으로 함께 오는 주문">합배송 ${r.groupSize}건</span>` : ''}${paymentTag(r.payment)}${protectTag(r)}${r.deliveredAt ? ` · 도착 ${fmtShort(r.deliveredAt)}` : ''}</div>
         ${r.status === 'delivered' ? '' : etaLine(r)}
         ${trackLine(r.track)}
       </div>
@@ -233,7 +234,8 @@ function viewRefunds(s) {
         ${thumb(r.image)}
         <div style="min-width:0">
           <div class="ti">${esc(r.title)}</div>
-          <div class="sub"><span class="badge ${cls}" style="margin:0">${t}</span><span class="muted">${fmtShort(r.date)}</span>${paymentTag(r.payment)}</div>
+          <div class="sub"><span class="badge ${cls}" style="margin:0">${t}</span><span class="muted">${fmtShort(r.date)}</span></div>
+          <div class="sub pay">${r.payment ? `결제수단 <b>${esc(r.payment)}</b>` : '<span class="muted">결제수단 확인 전</span>'}</div>
         </div>
         <div class="amt ${ac}">${amt}</div>
       </a>`; }).join('');
@@ -296,7 +298,7 @@ function renderNow() {
       <div class="main">
         <label class="st">기간 <select data-input="period">${PERIODS.map((p) => `<option value="${p[0]}" ${(state.settings.period || '1w') === p[0] ? 'selected' : ''}>${p[1]}</option>`).join('')}</select></label>
         ${state.loading ? '<button class="b" data-act="stop">중단</button>' : '<button class="b pri" data-act="loadall">' + (resumable ? '이어서 불러오기' : '불러오기') + '</button>'}
-        ${state.detail ? '<button class="b" data-act="stopdetail">조회 중단</button>' : '<button class="b" data-act="details">예상 배송일 조회</button>'}
+        ${state.detail || state.detailBusy ? '<button class="b" data-act="stopdetail">새로고침 중단</button>' : '<button class="b" data-act="details">배송현황 새로고침</button>'}
         <button class="b ghost" data-act="more" style="margin-left:auto">설정 ${state.moreOpen ? '▴' : '▾'}</button>
       </div>
       ${state.moreOpen ? `<div class="more">
