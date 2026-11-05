@@ -81,3 +81,22 @@ test('결제수단: 상세 API 키 / 화면 문구에서 읽는다', () => {
   const m = AES.mergeOrder({ id: '1', status: 'shipping', items: [] }, { id: '1', source: 'detail', payment: 'PayPal' });
   assert.strictEqual(m.payment, 'PayPal');
 });
+
+test('배송 조회 화면: 위치·상태가 따로 있는 이벤트와 현재 상태로 도착 여부를 읽는다', () => {
+  const ref = new Date(2026, 10, 5, 18, 0);
+  const ev = (loc, st, t) => ({ location: loc, status: st, time: t });
+  const page = { data: { trackingNumber: '998006720488', events: [ev('인천', '통관 완료', Date.parse('2026-11-04T10:00:00+09:00')), ev('시흥시 경기', '배송 완료', Date.parse('2026-11-05T17:07:00+09:00'))] } };
+  const a = AES.extractDetail('1', [], [{ url: 'x', text: JSON.stringify(page) }], { ref, track: true }).tracking;
+  assert.strictEqual(a.no, '998006720488');
+  assert.match(a.last.text, /시흥시 경기 · 배송 완료/);
+  assert.ok(AES.DELIVERED_EVENT.test(a.last.text));
+  // 이벤트 목록이 없어도 현재 상태 값이 배송 완료이면 도착으로 본다 (track 화면에서만)
+  const b = AES.extractDetail('1', [], [{ url: 'x', text: JSON.stringify({ data: { mailNo: 'ABCD1234567', logisticsStatus: 'Delivered' } }) }], { ref, track: true }).tracking;
+  assert.strictEqual(b.delivered, true);
+  assert.strictEqual(AES.extractDetail('1', [], [{ url: 'x', text: JSON.stringify({ data: { mailNo: 'ABCD1234567', logisticsStatus: 'Delivered' } }) }], { ref }).tracking.delivered, undefined);   // 상세 화면에서는 쓰지 않음
+  // 아직 배송 중이거나 "배송 완료 확인" 버튼 문구는 도착이 아니다
+  const c = AES.extractDetail('1', ['배송 완료 확인', '운송장 번호 LP00112233445'], [{ url: 'x', text: JSON.stringify({ data: { status: 'IN_TRANSIT', statusDesc: '배송 중' } }) }], { ref, track: true }).tracking;
+  assert.ok(c && !c.delivered);
+  // 화면에 단독으로 "배송 완료"가 있는 경우
+  assert.strictEqual(AES.extractDetail('1', ['배송 조회', '배송 완료', 'LP00112233445'], [], { ref, track: true }).tracking.delivered, true);
+});

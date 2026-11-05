@@ -188,7 +188,7 @@
     // 진행 중 배송: 예상 도착일은 주문 상세 페이지의 값만 사용 (추정하지 않음)
     const inProgress = [];
     // 주문 상태는 아직 "배송 중"인데 배송 조회(트래킹)의 마지막 이벤트가 배달 완료인 주문: 도착했지만 수령 확인(배송 완료 확인)을 누르기 전
-    const arrived = (o) => o.cls === 'shipping' && !!(o.track && o.track.last && AES.DELIVERED_EVENT.test(o.track.last.text || ''));
+    const arrived = (o) => o.cls === 'shipping' && !!(o.track && (o.track.delivered === true || (o.track.last && AES.DELIVERED_EVENT.test(o.track.last.text || ''))));
     for (const o of all) {
       if (o.cls !== 'pending_ship' && o.cls !== 'shipping') continue;
       if (arrived(o)) continue;

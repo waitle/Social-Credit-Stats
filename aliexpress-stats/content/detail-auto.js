@@ -21,7 +21,7 @@ async function runDetailAuto() {
     const t0 = Date.now();
     while (Date.now() - t0 < 22000) {
       await sleep(600);
-      res = AES.extractDetail(orderId, getLines(), caps, { ref: new Date() });
+      res = AES.extractDetail(orderId, getLines(), caps, { ref: new Date(), track: kind === 'track' });
       if (kind === 'track') {                                          // 배송 조회 화면: 운송장 번호를 읽으면 끝, 데이터가 오지 않으면 일정 시간 뒤 포기
         if (res.tracking && res.tracking.no) break;
         if (caps.length || getLines().length > 5) { loadedSince = loadedSince || Date.now(); if (Date.now() - loadedSince > 8000) break; }
@@ -35,6 +35,12 @@ async function runDetailAuto() {
     }
     const rel = (res ? res.rawLines.concat(res.apiLines) : []).filter((l) => /\d/.test(l) && /(배송|도착|예상|예정|결제|운송장|송장|delivery|deliver|arriv|estimat|ship|payment|pay with|tracking)/i.test(l)).slice(0, 25);
     const head = res ? res.rawLines.slice(0, 40) : [];
+    // 배송 조회 화면은 구조를 아직 다 몰라서, 진단용으로 화면 줄·응답 문구·호출한 API 를 조금 남긴다 (디버그 파일에서 확인)
+    const trackDiag = kind === 'track' && res ? {
+      lines: res.rawLines.slice(0, 80).map((l) => String(l).slice(0, 120)),
+      api: res.apiLines.filter((l) => /(배송|배달|완료|도착|운송장|통관|출고|delivered|deliver|tracking|logistic|status)/i.test(l)).slice(0, 60).map((l) => String(l).slice(0, 160)),
+      reqs: reqLog.map((r) => ({ api: r.api, data: (() => { try { return JSON.stringify(r.opts.data).slice(0, 200); } catch (_) { return ''; } })() })).slice(0, 12)
+    } : null;
     // 이 페이지가 호출한 mtop 상세 API 요청(데이터에 주문번호 포함)을 알려줘서, 이후 주문은 탭 없이 직접 호출하게 한다
     const byApi = new Map();
     for (const r of reqLog) { try { if (JSON.stringify(r.opts.data || '').includes(orderId)) byApi.set(r.api, { api: r.api, opts: r.opts }); } catch (_) {} }
@@ -43,6 +49,6 @@ async function runDetailAuto() {
       type: 'detailResult', orderId, kind,
       eta: res && res.eta, etaSrc: res && res.etaSrc, items: res ? res.items : [],
     tracking: res && res.tracking, protectEnd: res && res.protectEnd, payment: res && res.payment,
-      raw: { relevant: rel, head }, tpls
+      raw: kind === 'track' ? trackDiag : { relevant: rel, head }, tpls
     });
 }

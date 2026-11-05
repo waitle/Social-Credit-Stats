@@ -364,9 +364,25 @@
   }
 
   /** 운송장 번호, 택배사, 마지막 배송 이벤트(시간 최신) */
-  function pickTracking(jsons, lines, ref) {
-    let no = null, carrier = null, last = null;
-    const textOf = (o) => { for (const k of Object.keys(o)) if (/(desc|detail|content|status|event|title|message|action)/i.test(k) && typeof o[k] === 'string') { const t = stripHtml(o[k]); if (t.length >= 2 && t.length <= 200) return t; } return null; };
+  // 배송 조회 화면의 "현재 배송 상태"를 나타내는 키 (opts.track 일 때만 사용)
+  const KEY_TRACK_STATUS = /^(status|statusDesc|statusText|statusName|logisticsStatus|logisticsStatusDesc|deliveryStatus|deliveryStatusDesc|trackStatus|packageStatus|currentStatus|mainStatus|lastStatus|stateDesc|stateText)$/i;
+  const isDeliveredStatus = (v) => typeof v === 'string' && v.length <= 40 && DELIVERED_EVENT.test(v) && !/확인|confirm/i.test(v);
+  /**
+   * opts.track: 배송 조회 화면의 응답/화면일 때. 이 경우에만 "현재 배송 상태" 값과 화면의 단독 "배송 완료" 줄로 도착 여부(delivered)를 판단한다.
+   */
+  function pickTracking(jsons, lines, ref, opts) {
+    const trackPage = !!(opts && opts.track);
+    let no = null, carrier = null, last = null, delivered = false;
+    // 이벤트 문구: 상태·설명·위치 등 여러 칸에 나뉘어 있을 수 있어 모두 이어 붙인다 (예: "배송 완료 · 시흥시 경기")
+    const textOf = (o) => {
+      const parts = [];
+      for (const k of Object.keys(o)) {
+        if (!/(desc|detail|content|status|event|title|message|action|state|node|location|address|place|remark)/i.test(k) || typeof o[k] !== 'string') continue;
+        const t = stripHtml(o[k]).trim();
+        if (t.length >= 2 && t.length <= 200 && !parts.includes(t)) parts.push(t);
+      }
+      return parts.length ? parts.join(' · ').slice(0, 200) : null;
+    };
     const timeOf = (o) => {
       for (const k of Object.keys(o)) {
         if (!/(time|date|gmt)/i.test(k)) continue;
@@ -388,6 +404,7 @@
       } else {
         for (const k of Object.keys(n)) {
           const v = n[k];
+          if (trackPage && !delivered && KEY_TRACK_STATUS.test(k) && isDeliveredStatus(v)) delivered = true;
           if (!no && KEY_TRACKNO.test(k) && typeof v === 'string' && /^[A-Z0-9-]{8,40}$/i.test(v.trim())) no = v.trim();
           else if (!carrier && KEY_CARRIER.test(k) && typeof v === 'string' && v.trim().length < 60) carrier = stripHtml(v);
         }
@@ -401,8 +418,11 @@
         if (m && !/^\d{15,}$/.test(m[1])) { no = m[1]; break; }
       }
     }
-    if (!no && !last) return null;
-    return { no, carrier, last: last ? { text: last.text, time: toISO(last.t, true) } : null };
+    if (trackPage && !delivered) delivered = (lines || []).some((l) => /^(배송\s*완료|배달\s*완료|수령\s*완료|delivered)$/i.test(String(l).trim()));
+    if (!no && !last && !delivered) return null;
+    const out = { no, carrier, last: last ? { text: last.text, time: toISO(last.t, true) } : null };
+    if (delivered) out.delivered = true;
+    return out;
   }
 
   function extractDetail(orderId, lines, captures, opts) {
@@ -426,7 +446,7 @@
     }
     if (!eta) { const e = pickEta(apiLines, ref, true); if (e) { eta = e; etaSrc = 'api'; } }
     const jsons = (captures || []).map((c) => parseResponseText(c.text)).filter(Boolean);
-    const tracking = pickTracking(jsons, lines, ref);
+    const tracking = pickTracking(jsons, lines, ref, { track: !!(opts && opts.track) });
     const protectEnd = pickProtection(lines, ref) || pickProtection(apiLines, ref);
     const payment = pickPayment(jsons, lines) || pickPayment([], apiLines);
     return { eta, etaSrc, items, tracking, protectEnd, payment, rawLines: lines.slice(0, 120), apiLines: apiLines.slice(0, 150) };
@@ -477,12 +497,13 @@
     if (b.store && !(keepA && a.store)) out.store = b.store;
     if (b.protectEnd) out.protectEnd = b.protectEnd;
     if (b.track) out.track = b.track;
-    if (b.trackAt) out.trackAt = b.trackAt;
+    if (b.trackAt) { out.trackAt = b.trackAt; out.trackV = b.trackV || out.trackV; }
+    if (b.trackRaw) out.trackRaw = b.trackRaw;
     if (b.payment) out.payment = b.payment;
     if (b.payAt) out.payAt = b.payAt;
     // 배송 완료 시점: 추적 이벤트의 배달 완료 시간 > 상태가 배송 완료로 바뀐 것을 처음 본 시점
     const tl = out.track && out.track.last;
-    if (tl && tl.time && DELIVERED_EVENT.test(tl.text || '') && out.deliveredSrc !== 'tracking') { out.deliveredAt = tl.time; out.deliveredSrc = 'tracking'; }
+    if (tl && tl.time && (DELIVERED_EVENT.test(tl.text || '') || (out.track && out.track.delivered)) && out.deliveredSrc !== 'tracking') { out.deliveredAt = tl.time; out.deliveredSrc = 'tracking'; }
     else if (out.status === 'delivered' && !out.deliveredAt && a.status && a.status !== 'delivered' && a.status !== 'unknown') { out.deliveredAt = toISO(new Date(), true); out.deliveredSrc = 'observed'; }
     if (b.detailAt) { out.detailAt = b.detailAt; out.detailRaw = b.detailRaw || out.detailRaw; }
     out.items = keepA && (a.items || []).length ? a.items : mergeItems(a.items || [], b.items || []);

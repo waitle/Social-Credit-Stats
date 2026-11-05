@@ -63,7 +63,7 @@ const open = async (ctx) => {
 (async () => {
   const mock = await startMockAli({ key: fs.readFileSync(path.join(TMP, 'k.pem')), cert: fs.readFileSync(path.join(TMP, 'c.pem')), port: PORT });
   const { srv, stats, ctl } = mock;
-  const reset = () => { Object.assign(ctl, { captchaFailsPage3: 0, delayMs: 0 }); stats.pages = {}; stats.captchaHits = 0; stats.listPosts = 0; };
+  const reset = () => { Object.assign(ctl, { captchaFailsPage3: 0, delayMs: 0, trackOpaque: false }); stats.trackTabs = 0; stats.trackPosts = 0; stats.pages = {}; stats.captchaHits = 0; stats.listPosts = 0; };
 
   await step('보안 인증이 떠도 빠른 모드를 유지하고, 인증이 풀리면 이어서 끝까지', async () => {
     reset(); ctl.captchaFailsPage3 = 3;
@@ -228,6 +228,27 @@ const open = async (ctx) => {
     await ctx.close();
   });
 
+  await step('배송 조회 화면의 직접 호출 형식을 못 배워도, 탭으로 모든 배송 중 주문의 운송장·도착 여부를 읽는다', async () => {
+    reset(); ctl.trackOpaque = true;
+    const ctx = await fresh('p5f', { auto: false }); const page = await open(ctx);
+    await page.waitForTimeout(600);
+    await clickShadow(page, '[data-act="loadall"]');
+    await waitIdle(page);
+    await page.waitForTimeout(500);
+    stats.trackTabs = 0; stats.trackPosts = 0;                               // 목록을 불러오며 이미 일부를 읽었으니, 버튼으로 전부 다시 읽는 횟수만 센다
+    await clickShadow(page, '[data-act="details"]');
+    await waitText(page, /배송 현황 새로고침 완료/, 90000);
+    const ships = ALL.filter((o) => o.n % 5 === 0 || o.n % 5 === 3).length;
+    assert.strictEqual(stats.trackTabs, ships - 1, `도착한 1건을 뺀 배송 중 주문마다 탭으로 읽어야 함 (${stats.trackTabs}/${ships - 1})`);   // 이미 도착한 주문은 다시 읽지 않는다
+    assert.strictEqual(stats.trackPosts, ships - 1, '탭 안에서 호출됨');
+    const orders = (await stored(ctx)).orders;
+    const withNo = Object.values(orders).filter((o) => o.track && o.track.no).length;
+    assert.strictEqual(withNo, ships, '운송장을 모두 읽음');
+    const arrived = Object.values(orders).filter((o) => o.track && /Delivered/.test(o.track.last && o.track.last.text || ''));
+    assert.strictEqual(arrived.length, 1, '위치·상태가 따로 있는 이벤트에서도 도착을 인식: ' + JSON.stringify(arrived.map((o) => o.track)));
+    await ctx.close();
+  });
+
   await step('이미 불러온 범위에서 "불러오기"를 누르면 아무 일도 안 하는 대신 최신 주문을 다시 확인한다', async () => {
     reset();
     const ctx = await fresh('p5d', { auto: false }); const page = await open(ctx);
@@ -237,7 +258,7 @@ const open = async (ctx) => {
     const loads = stats.indexLoads;
     await clickShadow(page, '[data-act="loadall"]');
     await page.waitForEvent('load');
-    const t = await waitText(page, /추가분 확인|목록 .*저장됨/, 15000);
+    const t = await waitText(page, /(추가분 확인|목록) 완료.*저장됨/, 15000);
     assert.ok(stats.indexLoads > loads, '페이지를 새로 열어 최신 목록을 받아야 함');
     assert.match(t, /\d+건 저장됨/);
     await ctx.close();

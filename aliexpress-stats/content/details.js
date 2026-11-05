@@ -16,7 +16,7 @@ function applyDetail(id, res) {
   if (state.orders[id]) ingest([o]);
 }
 
-async function replayDetail(tpls, fromId, toId) {
+async function replayDetail(tpls, fromId, toId, track) {
   const caps = [];
   for (const t of tpls) {
     const dataStr = dataToStr(t.opts.data).split(fromId).join(toId);
@@ -26,7 +26,7 @@ async function replayDetail(tpls, fromId, toId) {
     if (!r.ok || !isOk(r.json)) { const why = errText(r); return { ok: false, why, captcha: AES.isCaptcha(why + ' ' + JSON.stringify((r.json && r.json.data) || '').slice(0, 300)) || why === 'timeout' }; }
     caps.push({ url: 'lib:' + t.api, text: JSON.stringify(r.json) });
   }
-  return { ok: true, res: AES.extractDetail(toId, [], caps, { ref: new Date() }) };
+  return { ok: true, res: AES.extractDetail(toId, [], caps, { ref: new Date(), track: !!track }) };
 }
 
 function tabFetch(ids, kind) {
@@ -108,13 +108,14 @@ async function fetchDetailsOnce(force) {
 
 /** 배송 조회 화면의 결과 반영: 운송장 번호와 배송 이벤트. 못 읽어도 시각은 남겨 같은 주문을 계속 다시 열지 않는다 */
 function applyTracking(id, res) {
-  const o = { id, source: 'detail', trackAt: Date.now() };
+  const o = { id, source: 'detail', trackAt: Date.now(), trackV: 2 };
   if (res.tracking) o.track = res.tracking;
+  if (res.raw) o.trackRaw = res.raw;
   if (res.payment) o.payment = res.payment;
   if (state.orders[id]) ingest([o]);
 }
 
-const TRACK_FRESH_MS = 3 * 3600 * 1000;
+const TRACK_FRESH_MS = 3 * 3600 * 1000, TRACK_FRESH_TAB_MS = 6 * 3600 * 1000;   // 탭으로만 읽히면 부담이 커서 간격을 늘린다
 /**
  * 배송 중인 주문의 "배송 조회" 화면에서 운송장 번호와 최신 배송 이벤트를 읽는다 (합배송 묶기, 도착 여부 판단에 사용).
  * 요청 형식을 한 번 배우면(배송 조회 화면을 백그라운드 탭으로 열어 호출을 관찰) 나머지는 탭 없이 직접 호출한다.
@@ -122,7 +123,7 @@ const TRACK_FRESH_MS = 3 * 3600 * 1000;
 async function fetchTrackingOnce(force) {
   const s = AES.computeStats(state.orders, {});
   const ids = [...new Set(s.inProgress.filter((r) => r.status === 'shipping').map((r) => r.orderId))]
-    .filter((id) => force || !(state.orders[id] && state.orders[id].trackAt && Date.now() - state.orders[id].trackAt < TRACK_FRESH_MS));
+    .filter((id) => force || !(state.orders[id] && state.orders[id].trackV === 2 && state.orders[id].trackAt && Date.now() - state.orders[id].trackAt < (state.settings.trackTpl ? TRACK_FRESH_MS : TRACK_FRESH_TAB_MS)));
   if (!ids.length) return;
   const total = ids.length;
   state.detail = { done: 0, total, running: true, base: 0 };
@@ -131,8 +132,9 @@ async function fetchTrackingOnce(force) {
   try {
     let tpl = state.settings.trackTpl && state.settings.trackTpl.valid && !AES.EXTRA.flags.disableFastDetail ? state.settings.trackTpl : null;
     let rest = ids.slice();
+    state.trackGot = 0;
     if (!tpl) {
-      // 학습: 운송장이 읽히는 주문을 만날 때까지 최대 3건을 탭으로 열어 결과와 요청 형식을 얻는다
+      // 학습: 요청 형식이 관찰되는 주문을 만날 때까지 최대 3건을 탭으로 열어 결과를 얻는다
       let learned = null;
       for (let i = 0; i < 3 && rest.length && !state.cancelDetail && !learned; i++) {
         state.trackTplCand = null;
@@ -140,23 +142,23 @@ async function fetchTrackingOnce(force) {
         await tabFetch([id], 'track'); bump();
         if (state.trackTplCand) learned = state.trackTplCand;
       }
-      if (!learned) { state.fast.track = 'fail:no-tracking'; rest = []; }          // 어느 주문에서도 운송장을 못 읽으면 나머지 주문의 탭을 열지 않는다
-      else {
-        const v = await replayDetail(learned.tpls, learned.orderId, learned.orderId);
+      if (learned) {
+        const v = await replayDetail(learned.tpls, learned.orderId, learned.orderId, true);
         const same = v.ok && v.res && v.res.tracking && v.res.tracking.no === learned.no;
         state.fast.track = same ? 'learned' : 'fail:mismatch' + (v.ok ? '' : '(' + v.why + ')');
         if (same) { tpl = { tpls: learned.tpls, orderId: learned.orderId, valid: true }; state.settings.trackTpl = tpl; store.save(); }
-      }
+      } else if (state.trackGot > 0) state.fast.track = 'tabs';               // 직접 호출 형식은 못 찾았지만 탭으로는 운송장이 읽힘 → 나머지도 탭으로
+      else { state.fast.track = 'fail:no-tracking'; rest = []; }              // 어느 주문에서도 운송장을 못 읽으면 나머지 주문의 탭은 열지 않는다
     } else state.fast.track = 'saved';
 
     if (rest.length && tpl) {
       const failed = []; let sawCaptcha = false;
       await pool(rest, 6, async (id) => {
         let r = null;
-        try { r = await replayDetail(tpl.tpls, tpl.orderId, id); } catch (_) {}
+        try { r = await replayDetail(tpl.tpls, tpl.orderId, id, true); } catch (_) {}
         if (r && !r.ok && r.captcha && !state.cancelDetail) {
           sawCaptcha = true;
-          const w = await waitCaptcha(async () => { const x = await replayDetail(tpl.tpls, tpl.orderId, id); return x.ok ? { json: x, ok: true } : x; }, 'detail');
+          const w = await waitCaptcha(async () => { const x = await replayDetail(tpl.tpls, tpl.orderId, id, true); return x.ok ? { json: x, ok: true } : x; }, 'detail');
           r = w.json || (w.ok ? w : r);
         }
         if (r && r.ok) { applyTracking(id, r.res); bump(); } else failed.push(id);
@@ -164,7 +166,7 @@ async function fetchTrackingOnce(force) {
       if (failed.length === rest.length && !sawCaptcha) { state.settings.trackTpl = null; store.save(); state.fast.track += ' → 직접 호출 실패, 탭으로 전환'; }
       if (failed.length && !state.cancelDetail && !sawCaptcha) { state.detail.base = state.detail.done; await tabFetch(failed, 'track'); }
     } else if (rest.length && !state.cancelDetail) {
-      state.detail.base = state.detail.done; await tabFetch(rest, 'track');         // 직접 호출 형식을 못 배웠어도 운송장이 읽히면 탭으로 계속
+      state.detail.base = state.detail.done; await tabFetch(rest, 'track');
     }
   } finally {
     state.detail = null;
@@ -179,6 +181,7 @@ function initDetailsMessages() {
     if (msg.type === 'detail' && msg.kind === 'track') {
       // 배송 조회 화면 탭의 결과: 운송장·배송 이벤트만 반영
       if (msg.tpls && msg.tpls.length && msg.tracking && msg.tracking.no && !state.trackTplCand) state.trackTplCand = { tpls: msg.tpls, orderId: msg.orderId, no: msg.tracking.no };
+      if (msg.tracking && (msg.tracking.no || msg.tracking.delivered)) state.trackGot = (state.trackGot || 0) + 1;
       applyTracking(msg.orderId, { tracking: msg.tracking, payment: msg.payment, raw: msg.raw });
     } else if (msg.type === 'detail') {
       if (msg.tpls && msg.tpls.length && msg.eta && !state.detailTplCand) state.detailTplCand = { tpls: msg.tpls, orderId: msg.orderId, eta: msg.eta };
