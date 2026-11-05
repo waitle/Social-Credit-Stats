@@ -79,3 +79,25 @@ test('티켓류는 배송 현황(진행 중/완료)에서 제외하되 구매 �
   assert.strictEqual(s.orderCount, 4);                                                                    // 지출 통계에는 포함
   assert.ok(AES.isTicket('Airline boarding pass') && AES.isTicket('항공권 예약') && !AES.isTicket('USB 케이블'));
 });
+
+test('합배송: 같은 운송장 번호의 서로 다른 주문을 묶는다', () => {
+  const it = (id, title) => ({ id, title, qty: 1 });
+  const tr = (no) => ({ no, carrier: 'Cainiao', last: null });
+  const map = {
+    a: { id: 'a', status: 'shipping', date: '2026-10-30', total: { amount: 5000, currency: 'KRW' }, track: tr('LP00112233445'), payment: 'PayPal', items: [it('a1', '케이블 A')] },
+    b: { id: 'b', status: 'shipping', date: '2026-10-31', total: { amount: 6000, currency: 'KRW' }, track: tr('lp00112233445'), items: [it('b1', '케이블 B'), it('b2', '케이스 B')] },
+    c: { id: 'c', status: 'delivered', date: '2026-10-20', total: { amount: 7000, currency: 'KRW' }, track: tr('LP00112233445'), items: [it('c1', '이전 주문')] },
+    d: { id: 'd', status: 'shipping', date: '2026-10-31', total: { amount: 8000, currency: 'KRW' }, track: tr('LP99999999999'), items: [it('d1', '단독')] },
+    e: { id: 'e', status: 'shipping', date: '2026-10-31', total: { amount: 9000, currency: 'KRW' }, items: [it('e1', '운송장 없음')] }
+  };
+  const s = AES.computeStats(map, { now });
+  assert.strictEqual(s.shipGroups.length, 1);
+  assert.deepStrictEqual(s.shipGroups[0].orderIds.sort(), ['a', 'b', 'c']);
+  assert.strictEqual(s.shipGroups[0].members.length, 4);                                  // 상품 4개
+  const sizes = Object.fromEntries([...s.inProgress, ...s.delivered].map((r) => [r.title, r.groupSize]));
+  assert.deepStrictEqual([sizes['케이블 A'], sizes['케이블 B'], sizes['이전 주문'], sizes['단독'], sizes['운송장 없음']], [3, 3, 3, 0, 0]);
+  assert.strictEqual(s.inProgress.find((r) => r.title === '케이블 A').payment, 'PayPal');
+  // 한 주문 안의 여러 상품이 같은 운송장인 것은 합배송이 아니다
+  const one = { x: { id: 'x', status: 'shipping', date: '2026-10-31', track: tr('LP55555555555'), items: [it('x1', 'a'), it('x2', 'b')] } };
+  assert.strictEqual(AES.computeStats(one, { now }).shipGroups.length, 0);
+});

@@ -6,9 +6,10 @@
 // 2) 없으면 첫 주문만 백그라운드 탭으로 열어 요청 형식을 학습 → 검증 후 나머지는 직접 호출
 // 3) 실패한 주문은 백그라운드 탭으로 처리 (느리지만 확실)
 function applyDetail(id, res) {
-  const o = { id, source: 'detail', detailAt: Date.now(), detailRaw: { relevant: (res.apiLines || []).filter((l) => /\d/.test(l) && /(배송|도착|예상|예정|delivery|deliver|arriv|estimat)/i.test(l)).slice(0, 15), head: [] } };
+  const o = { id, source: 'detail', detailAt: Date.now(), detailRaw: { relevant: (res.apiLines || []).filter((l) => /\d/.test(l) && /(배송|도착|예상|예정|결제|운송장|송장|delivery|deliver|arriv|estimat|payment|tracking)/i.test(l)).slice(0, 25), head: [] } };
   if (res.eta) { o.eta = res.eta; o.etaSrc = 'detail'; }
   if (res.tracking) o.track = res.tracking;
+  if (res.payment) o.payment = res.payment;
   if (res.protectEnd) o.protectEnd = res.protectEnd;
   if (res.items && res.items.length) o.items = res.items.map((i) => ({ id: i.id, eta: i.eta }));
   if (state.orders[id]) ingest([o]);
@@ -43,6 +44,11 @@ async function fetchDetails(force) {
 async function fetchDetailsOnce(force) {
   const s = AES.computeStats(state.orders, {});
   let ids = [...new Set(s.inProgress.map((r) => r.orderId))].filter((id) => force || !(state.orders[id] && state.orders[id].detailAt && Date.now() - state.orders[id].detailAt < 6 * 3600 * 1000));
+  // 환불 진행·완료 주문은 결제수단만 보려고 한 번 읽는다 (이미 배송 대기·진행 주문이 있어 요청 형식을 배우는 중이거나, 저장된 형식이 있을 때만; 탭을 새로 열지는 않는다)
+  const tplReady = !!(state.settings.detailTpl && state.settings.detailTpl.valid && !AES.EXTRA.flags.disableFastDetail);
+  const extra = new Set();
+  if (ids.length || tplReady) for (const r of s.refunds) if (r.state !== 'none' && !ids.includes(r.orderId)) { const o = state.orders[r.orderId]; if (o && !o.payment && !o.detailAt) { ids.push(r.orderId); extra.add(r.orderId); } }
+  const mainTotal = ids.length - extra.size;
   if (!ids.length) { if (force) { state.progressDetail = '조회할 배송 대기·진행 주문이 없습니다'; render(); } return; }
   const total = ids.length;
   state.detail = { done: 0, total, running: true, base: 0 };
@@ -74,10 +80,10 @@ async function fetchDetailsOnce(force) {
           const w = await waitCaptcha(async () => { const x = await replayDetail(tpl.tpls, tpl.orderId, id); return x.ok ? { json: x, ok: true } : x; }, 'detail');
           r = w.json || (w.ok ? w : r);
         }
-        if (r && r.ok) { applyDetail(id, r.res); bump(); } else failed.push(id);
+        if (r && r.ok) { applyDetail(id, r.res); bump(); } else if (extra.has(id)) bump(); else failed.push(id);
       });
-      if (failed.length === ids.length && !sawCaptcha) { state.settings.detailTpl = null; store.save(); state.fast.detail += ' → 직접 호출 실패, 탭으로 전환'; }
-    } else failed = ids;
+      if (failed.length && failed.length === ids.length - extra.size && !sawCaptcha) { state.settings.detailTpl = null; store.save(); state.fast.detail += ' → 직접 호출 실패, 탭으로 전환'; }
+    } else failed = ids.filter((id) => !extra.has(id));
     if (failed.length && !state.cancelDetail && !sawCaptcha) {      // 보안 인증 때문에 못 받은 주문은 탭으로 넘기지 않고 다음 갱신 때 다시 받는다
       state.detail.base = state.detail.done;
       await tabFetch(failed);
@@ -85,7 +91,7 @@ async function fetchDetailsOnce(force) {
   } finally {
     state.detail = null;
     const miss = AES.computeStats(state.orders, {}).etaMissingOrders.length;
-    noteHealth('detail', { total, found: total - Math.min(total, miss) });
+    noteHealth('detail', { total: mainTotal, found: mainTotal - Math.min(mainTotal, miss) });
     state.progressDetail = state.cancelDetail ? '예상 배송일 조회 중단됨' : `예상 배송일 조회 완료${miss ? ` (상세에 날짜가 없는 주문 ${miss}건)` : ''}`;
     render();
   }
@@ -100,6 +106,7 @@ function initDetailsMessages() {
       const o = { id: msg.orderId, source: 'detail', detailAt: Date.now(), detailRaw: msg.raw || null };
       if (msg.eta) { o.eta = msg.eta; o.etaSrc = 'detail'; }
       if (msg.tracking) o.track = msg.tracking;
+      if (msg.payment) o.payment = msg.payment;
       if (msg.protectEnd) o.protectEnd = msg.protectEnd;
       if (msg.items && msg.items.length) o.items = msg.items.map((i) => ({ id: i.id, eta: i.eta }));
       if (state.orders[msg.orderId]) ingest([o]);

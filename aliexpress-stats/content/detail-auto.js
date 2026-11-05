@@ -26,7 +26,7 @@ async function runDetailAuto() {
         if (Date.now() - loadedSince > 7000) break;
       }
     }
-    const rel = (res ? res.rawLines.concat(res.apiLines) : []).filter((l) => /\d/.test(l) && /(배송|도착|예상|예정|delivery|deliver|arriv|estimat|ship)/i.test(l)).slice(0, 25);
+    const rel = (res ? res.rawLines.concat(res.apiLines) : []).filter((l) => /\d/.test(l) && /(배송|도착|예상|예정|결제|운송장|송장|delivery|deliver|arriv|estimat|ship|payment|pay with|tracking)/i.test(l)).slice(0, 25);
     const head = res ? res.rawLines.slice(0, 40) : [];
     // 이 페이지가 호출한 mtop 상세 API 요청(데이터에 주문번호 포함)을 알려줘서, 이후 주문은 탭 없이 직접 호출하게 한다
     const byApi = new Map();
@@ -35,7 +35,7 @@ async function runDetailAuto() {
     chrome.runtime.sendMessage({
       type: 'detailResult', orderId,
       eta: res && res.eta, etaSrc: res && res.etaSrc, items: res ? res.items : [],
-    tracking: res && res.tracking, protectEnd: res && res.protectEnd,
+    tracking: res && res.tracking, protectEnd: res && res.protectEnd, payment: res && res.payment,
       raw: { relevant: rel, head }, tpls
     });
 }

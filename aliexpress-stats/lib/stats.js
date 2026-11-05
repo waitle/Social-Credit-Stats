@@ -32,6 +32,21 @@
     return TICKET_RE.test(t) && !TICKET_ACCESSORY_RE.test(t);
   }
 
+  /** 운송장 번호가 같은 서로 다른 주문들을 묶는다 → [{ no, carrier, orderIds, members: 행 목록 }] (큰 묶음 먼저) */
+  function groupByTracking(rows) {
+    const map = new Map();
+    for (const r of rows) {
+      const no = r.track && r.track.no ? String(r.track.no).trim().toUpperCase() : '';
+      if (no.length < 8) continue;
+      let g = map.get(no);
+      if (!g) { g = { no, carrier: (r.track && r.track.carrier) || '', orderIds: [], members: [] }; map.set(no, g); }
+      if (!g.orderIds.includes(r.orderId)) g.orderIds.push(r.orderId);
+      if (!g.carrier && r.track.carrier) g.carrier = r.track.carrier;
+      g.members.push(r);
+    }
+    return [...map.values()].filter((g) => g.orderIds.length >= 2).sort((a, b) => b.orderIds.length - a.orderIds.length || a.no.localeCompare(b.no));
+  }
+
   function categorize(title) {
     const t = String(title || '');
     for (const [name, re] of CATEGORIES) if (re.test(t)) return name;
@@ -186,7 +201,7 @@
           status: o.cls, statusText: o.statusText, orderDate: o.date,
           etaStart: e ? e.start : null, etaEnd: e ? e.end : null, etaFromDetail: !!(o.etaSrc === 'detail' || it.eta),
           detailTried: !!o.detailAt, daysLeft, _s: start,
-          store: o.store || '', track: o.track || null, protectEnd: o.protectEnd || null,
+          store: o.store || '', track: o.track || null, payment: o.payment || '', protectEnd: o.protectEnd || null,
           protectDaysLeft: o.protectEnd ? Math.ceil((fromISO(o.protectEnd) - now) / DAY) : null
         });
       }
@@ -199,9 +214,16 @@
     for (const o of all) {
       if (o.cls !== 'delivered') continue;
       const items = o.items && o.items.length ? o.items : [{ title: '(상품명 확인 불가)', qty: 1 }];
-      for (const it of items) if (!isTicket(it.title)) delivered.push({ orderId: o.id, title: it.title, qty: it.qty || 1, image: it.image || '', url: it.url || '', status: 'delivered', orderDate: o.date, deliveredAt: o.deliveredAt || null, track: o.track || null });
+      for (const it of items) if (!isTicket(it.title)) delivered.push({ orderId: o.id, title: it.title, qty: it.qty || 1, image: it.image || '', url: it.url || '', status: 'delivered', orderDate: o.date, deliveredAt: o.deliveredAt || null, track: o.track || null, payment: o.payment || '' });
     }
     delivered.sort((a, b) => ((b.orderDate || '') > (a.orderDate || '') ? 1 : (b.orderDate || '') < (a.orderDate || '') ? -1 : 0));
+
+    // 합배송: 같은 운송장 번호로 함께 오는 주문(서로 다른 주문 2건 이상)을 묶는다. 운송장 번호는 주문 상세에서 읽은 값만 쓴다.
+    const shipGroups = groupByTracking([...inProgress, ...delivered]);
+    const groupOf = new Map();
+    for (const g of shipGroups) for (const m of g.members) groupOf.set(m.orderId, g);
+    for (const r of inProgress) { const g = groupOf.get(r.orderId); r.groupSize = g ? g.orderIds.length : 0; }
+    for (const r of delivered) { const g = groupOf.get(r.orderId); r.groupSize = g ? g.orderIds.length : 0; }
 
     // 취소·환불 주문: 환불 진행 중 / 완료 / 정보 없음(결제 전 취소 등)
     const refunds = [];
@@ -220,7 +242,7 @@
       const first = (o.items || [])[0] || {};
       refunds.push({
         orderId: o.id, date: o.date, state: st, title: (o.items || []).map((it) => it.title).join(' / ') || '(상품명 확인 불가)',
-        image: first.image || '', url: first.url || '', amount: amt, amountSrc: amtSrc, text: (o.refund && o.refund.text) || ''
+        image: first.image || '', url: first.url || '', amount: amt, amountSrc: amtSrc, text: (o.refund && o.refund.text) || '', payment: o.payment || ''
       });
     }
     const order = { processing: 0, done: 1, none: 2 };
@@ -299,7 +321,7 @@
       orderCount: valid.length, totalOrders: all.length, itemCount, primaryOrders,
       spent, discount, discountOrders,
       statusOrders, statusItems,
-      inProgress,
+      inProgress, shipGroups,
       delivered, deliveredItems: delivered.reduce((s, r) => s + r.qty, 0),
       inProgressItems: inProgress.reduce((s, r) => s + r.qty, 0),
       pendingItems: inProgress.filter((r) => r.status === 'pending_ship').reduce((s, r) => s + r.qty, 0),
@@ -322,6 +344,6 @@
     }, extra || {});
   }
 
-  Object.assign(AES, { statsOptions, CATEGORIES, categorize, isTicket, STOP, topKeywords, addTo, normTitle, median, primaryCurrency, estimateRates, computeStats });
+  Object.assign(AES, { statsOptions, CATEGORIES, categorize, isTicket, groupByTracking,  STOP, topKeywords, addTo, normTitle, median, primaryCurrency, estimateRates, computeStats });
   if (typeof module !== 'undefined' && module.exports) module.exports = AES;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

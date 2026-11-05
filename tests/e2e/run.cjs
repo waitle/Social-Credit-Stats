@@ -112,6 +112,12 @@ async function waitIdle(page, ms = 25000) {
     const s = await waitPanel(page, /통관 진행 중/);
     assert.match(s, /Cainiao LP0000000000/);
     assert.match(s, /보호 D-3/);
+    assert.match(s, /합배송 1묶음/);                                 // 0번·3번 주문이 같은 운송장
+    assert.match(s, /합배송 2건/);
+    assert.match(s, /Visa \*\*\*\*1234/);                              // 상세에서 읽은 결제수단
+    await shadowClick(page, '[data-tab="refunds"]');
+    const rf = await waitPanel(page, /환불/);
+    assert.match(rf, /Visa \*\*\*\*1234|PayPal/, '환불 목록에도 결제수단');
     await page.close();
   });
 

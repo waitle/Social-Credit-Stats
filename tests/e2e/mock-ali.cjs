@@ -48,7 +48,9 @@ function detailPayload(id) {
       orderId: id,
       deliveryText: `예상 배송일: ${koMD(daysFromNow(d))} - ${koMD(daysFromNow(d + 6))}`,
       protection: `구매자 보호 기간 확인 ${koMD(daysFromNow(o.n === 0 ? 3 : 40))}`,
-      logistics: { trackingNumber: 'LP' + String(o.n).padStart(12, '0'), logisticsCompany: 'Cainiao', events: [
+      // 0번과 3번 주문은 같은 운송장(합배송)
+      paymentMethod: o.n % 2 ? 'PayPal' : 'Visa ****1234',
+      logistics: { trackingNumber: 'LP' + String(o.n === 3 ? 0 : o.n).padStart(12, '0'), logisticsCompany: 'Cainiao', events: [
         { time: Date.now() - 2 * 86400000, desc: '출고 완료' }, { time: Date.now() - 86400000, desc: '통관 진행 중' }] }
     },
     ret: ['SUCCESS::ok']

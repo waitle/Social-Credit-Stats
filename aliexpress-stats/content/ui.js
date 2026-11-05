@@ -100,6 +100,12 @@ label.st input{width:70px;padding:3px 6px;border:1px solid var(--bd);border-radi
 .alert button.b{margin-top:6px}
 .tag{display:inline-block;font-size:11px;font-weight:600;padding:1px 6px;border-radius:6px;background:var(--card);color:var(--mu);margin-left:6px}
 .tag.red{background:#fee2e2;color:#b91c1c}
+.grp{border:1px solid var(--bd);border-radius:10px;padding:8px 10px;margin:0 0 8px;background:var(--card)}
+.grp .gh{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:600}
+.grp .gh span:last-child{color:var(--mu);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grp a{display:block;font-size:12px;color:var(--fg);text-decoration:none;padding:3px 0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.grp a:hover{text-decoration:underline}
+.tag.blue{background:#dbeafe;color:#1d4ed8}
 .trk{color:var(--mu);font-size:12px;margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .prow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;border-bottom:1px solid var(--bd)}
 .prow a.row{border-bottom:0}
@@ -193,13 +199,14 @@ function viewShipping(s) {
   const chips = [['all', '전체'], ['pending_ship', '배송 전'], ['shipping', '배송 중'], ['delivered', '배송 완료']];
   const head = countsBanner() + loadedNote(s) + `<div class="seg">${chips.map(([k, t]) => `<button data-ship="${k}" class="${f === k ? 'on' : ''}">${t} ${cnt[k]}</button>`).join('')}</div>`;
   const rows = [...s.inProgress, ...s.delivered].filter((r) => f === 'all' || r.status === f);
-  if (!rows.length) return head + (s.totalOrders ? '<div class="empty">해당하는 주문이 없습니다</div>' : emptyView());
-  return head + rows.map((r) => `
+  const groups = groupsView(s, f);
+  if (!rows.length) return head + groups + (s.totalOrders ? '<div class="empty">해당하는 주문이 없습니다</div>' : emptyView());
+  return head + groups + rows.map((r) => `
     <a class="row" href="${esc(orderUrl(r.orderId))}" target="_blank" rel="noopener" title="주문 상세 열기">
       ${thumb(r.image)}
       <div class="m">
         <div class="ti">${esc(r.title)}</div>
-        <div class="sub">${badge(r.status)}${r.qty > 1 ? `${r.qty}개 · ` : ''}주문일 ${fmtDate(r.orderDate)}${protectTag(r)}${r.deliveredAt ? ` · 도착 ${fmtShort(r.deliveredAt)}` : ''}</div>
+        <div class="sub">${badge(r.status)}${r.qty > 1 ? `${r.qty}개 · ` : ''}주문일 ${fmtDate(r.orderDate)}${r.groupSize ? `<span class="tag blue" title="같은 운송장으로 함께 오는 주문">합배송 ${r.groupSize}건</span>` : ''}${paymentTag(r.payment)}${protectTag(r)}${r.deliveredAt ? ` · 도착 ${fmtShort(r.deliveredAt)}` : ''}</div>
         ${r.status === 'delivered' ? '' : etaLine(r)}
         ${trackLine(r.track)}
       </div>
@@ -226,7 +233,7 @@ function viewRefunds(s) {
         ${thumb(r.image)}
         <div style="min-width:0">
           <div class="ti">${esc(r.title)}</div>
-          <div class="sub"><span class="badge ${cls}" style="margin:0">${t}</span><span class="muted">${fmtShort(r.date)}</span></div>
+          <div class="sub"><span class="badge ${cls}" style="margin:0">${t}</span><span class="muted">${fmtShort(r.date)}</span>${paymentTag(r.payment)}</div>
         </div>
         <div class="amt ${ac}">${amt}</div>
       </a>`; }).join('');
@@ -451,6 +458,17 @@ function protectTag(r) {
   const soon = r.protectDaysLeft <= (state.settings.protectDays != null ? state.settings.protectDays : 7);
   return `<span class="tag ${soon ? 'red' : ''}" title="구매자 보호 기간 종료 ${esc(fmtShort(r.protectEnd))}">보호 ${r.protectDaysLeft <= 0 ? '종료' : 'D-' + r.protectDaysLeft}</span>`;
 }
+
+/** 같은 운송장 번호로 함께 오는 주문 묶음 (필터가 배송 중/전/완료이면 그 상태의 상품이 든 묶음만) */
+function groupsView(s, f) {
+  const gs = (s.shipGroups || []).map((g) => ({ ...g, members: g.members.filter((m) => f === 'all' || m.status === f) })).filter((g) => new Set(g.members.map((m) => m.orderId)).size >= 1 && g.members.length);
+  if (!gs.length) return '';
+  return `<h2>합배송 ${gs.length}묶음</h2>` + gs.map((g) => `<div class="grp">
+    <div class="gh"><span>주문 ${g.orderIds.length}건 · ${g.members.length}개 상품</span><span>${esc([g.carrier, g.no].filter(Boolean).join(' '))}</span></div>
+    ${g.members.map((m) => `<a href="${esc(orderUrl(m.orderId))}" target="_blank" rel="noopener" title="${esc(m.title)}">${esc(m.title)}</a>`).join('')}
+  </div>`).join('');
+}
+const paymentTag = (p) => (p ? `<span class="tag" title="결제수단">${esc(p)}</span>` : '');
 
 function trackLine(t) {
   if (!t) return '';

@@ -337,6 +337,32 @@
    * 주문 상세 페이지에서 예상 배송일 추출.
    * lines: 화면 텍스트 줄들, captures: [{url, text}] API 응답들
    */
+  /**
+   * 결제수단: 상세 페이지/상세 API 에서 "결제 수단 …" 표시를 찾는다 (예: Visa ****1234, PayPal, 카카오페이).
+   * 실제 상세 페이지의 항목 이름은 아직 확인하지 못해, 흔한 키 이름과 표시 문구를 넓게 인식한다.
+   */
+  const KEY_PAYMENT = /^(paymentMethod(Name|Text|Desc)?|payMethod(Name|Text)?|paymentChannel(Name|Text)?|payChannel(Name|Text)?|payTypeName|paymentTypeName|paymentToolName|payToolName|cashierChannelName|paymentInstrument(Name)?)$/i;
+  const PAYMENT_LABEL = /^(결제\s*(수단|방법|방식)|지불\s*(수단|방법)|payment\s*(method|type|channel)|paid\s*(with|by)|pay\s*(with|by))\s*[:：]?\s*(.*)$/i;
+  const payOk = (v) => typeof v === 'string' && (() => { const t = stripHtml(v).trim(); return t.length >= 2 && t.length <= 60 && !/^\d+$/.test(t) && !/^[A-Z0-9]+(_[A-Z0-9]+)+$/.test(t) && !/^(true|false|null|undefined)$/i.test(t); })();
+  function pickPayment(jsons, lines) {
+    let found = null;
+    (function walk(n, d) {
+      if (found || !n || typeof n !== 'object' || d > 30) return;
+      if (!Array.isArray(n)) for (const k of Object.keys(n)) if (KEY_PAYMENT.test(k) && payOk(n[k])) { found = stripHtml(n[k]).trim(); return; }
+      for (const k of Object.keys(n)) walk(n[k], d + 1);
+    })(jsons, 0);
+    if (found) return found;
+    const ls = lines || [];
+    for (let i = 0; i < ls.length; i++) {
+      const m = String(ls[i]).trim().match(PAYMENT_LABEL);
+      if (!m) continue;
+      const same = (m[m.length - 1] || '').trim();
+      const v = same || (ls[i + 1] ? String(ls[i + 1]).trim() : '');       // 라벨만 있는 줄이면 다음 줄이 값
+      if (payOk(v) && !PAYMENT_LABEL.test(v)) return stripHtml(v).trim();
+    }
+    return null;
+  }
+
   /** 운송장 번호, 택배사, 마지막 배송 이벤트(시간 최신) */
   function pickTracking(jsons, lines, ref) {
     let no = null, carrier = null, last = null;
@@ -402,7 +428,8 @@
     const jsons = (captures || []).map((c) => parseResponseText(c.text)).filter(Boolean);
     const tracking = pickTracking(jsons, lines, ref);
     const protectEnd = pickProtection(lines, ref) || pickProtection(apiLines, ref);
-    return { eta, etaSrc, items, tracking, protectEnd, rawLines: lines.slice(0, 120), apiLines: apiLines.slice(0, 150) };
+    const payment = pickPayment(jsons, lines) || pickPayment([], apiLines);
+    return { eta, etaSrc, items, tracking, protectEnd, payment, rawLines: lines.slice(0, 120), apiLines: apiLines.slice(0, 150) };
   }
 
   /** fetch 응답 텍스트(JSON / JSONP) → 객체 */
@@ -450,6 +477,7 @@
     if (b.store && !(keepA && a.store)) out.store = b.store;
     if (b.protectEnd) out.protectEnd = b.protectEnd;
     if (b.track) out.track = b.track;
+    if (b.payment) out.payment = b.payment;
     // 배송 완료 시점: 추적 이벤트의 배달 완료 시간 > 상태가 배송 완료로 바뀐 것을 처음 본 시점
     const tl = out.track && out.track.last;
     if (tl && tl.time && DELIVERED_EVENT.test(tl.text || '') && out.deliveredSrc !== 'tracking') { out.deliveredAt = tl.time; out.deliveredSrc = 'tracking'; }
@@ -463,6 +491,6 @@
   }
 
 
-  Object.assign(AES, { KEY_STORE, KEY_TRACKNO, KEY_CARRIER, TRACK_LABEL, DELIVERED_EVENT, pickTracking, ORDER_ID_RE, ITEM_HREF_RE, qtyFromText, isStrike, scrapeDom, ID_KEYS, isId, firstOf, itemFromObject, KEY_DATE, KEY_STATUS, KEY_TOTAL, KEY_TOTAL_EXCL, KEY_DISC, KEY_DISC_EXCL, KEY_ETA, epochToDate, stripHtml, subtreeStrings, refundState, refundFromObject, refundAmountFromObject, refundFromLines, finishRefund, findListMeta, extractFromJson, extractDetail, parseResponseText, itemKey, mergeItems, mergeOrder });
+  Object.assign(AES, { KEY_STORE, KEY_TRACKNO, KEY_CARRIER, TRACK_LABEL, DELIVERED_EVENT, pickTracking, pickPayment, ORDER_ID_RE, ITEM_HREF_RE, qtyFromText, isStrike, scrapeDom, ID_KEYS, isId, firstOf, itemFromObject, KEY_DATE, KEY_STATUS, KEY_TOTAL, KEY_TOTAL_EXCL, KEY_DISC, KEY_DISC_EXCL, KEY_ETA, epochToDate, stripHtml, subtreeStrings, refundState, refundFromObject, refundAmountFromObject, refundFromLines, finishRefund, findListMeta, extractFromJson, extractDetail, parseResponseText, itemKey, mergeItems, mergeOrder });
   if (typeof module !== 'undefined' && module.exports) module.exports = AES;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -69,3 +69,15 @@ test('배송 완료 시점: 상태 변화 관측 / 추적 이벤트 우선', () 
   const t = AES.mergeOrder({ id: '2', status: 'shipping', source: 'api' }, { id: '2', source: 'detail', track: { no: 'X', last: { text: '배달 완료', time: '2026-11-01T10:00' } } });
   assert.strictEqual(t.deliveredAt, '2026-11-01T10:00');
 });
+
+test('결제수단: 상세 API 키 / 화면 문구에서 읽는다', () => {
+  assert.strictEqual(AES.pickPayment([{ data: { payInfo: { paymentMethodName: 'Visa ****1234' } } }], []), 'Visa ****1234');
+  assert.strictEqual(AES.pickPayment([], ['주문 정보', '결제 수단: 카카오페이', '합계 ₩1,000']), '카카오페이');
+  assert.strictEqual(AES.pickPayment([], ['Payment method', 'PayPal', 'Total']), 'PayPal');          // 라벨만 있는 줄 → 다음 줄
+  assert.strictEqual(AES.pickPayment([{ payChannel: 'ONLINE_PAY_01', paymentType: '123' }], []), null);   // 코드값은 쓰지 않음
+  assert.strictEqual(AES.pickPayment([], ['결제 수단', '결제 방법']), null);
+  const d = AES.extractDetail('1', [], [{ url: 'x', text: JSON.stringify({ data: { orderId: '1', paymentMethod: 'MasterCard ****9999' } }) }], { ref: new Date(2026, 10, 3) });
+  assert.strictEqual(d.payment, 'MasterCard ****9999');
+  const m = AES.mergeOrder({ id: '1', status: 'shipping', items: [] }, { id: '1', source: 'detail', payment: 'PayPal' });
+  assert.strictEqual(m.payment, 'PayPal');
+});
