@@ -475,7 +475,7 @@ const paymentTag = (p) => (p ? `<span class="tag" title="결제수단">${esc(p)}
 function trackLine(t) {
   if (!t) return '';
   const head = [t.carrier, t.no].filter(Boolean).join(' ');
-  const last = t.last ? `${t.last.text} (${fmtShort(t.last.time)})` : '';
+  const last = t.last ? (t.last.time ? `${t.last.text} (${fmtShort(t.last.time)})` : t.last.text) : '';
   return `<div class="trk">${esc([head, last].filter(Boolean).join(' · '))}</div>`;
 }
 

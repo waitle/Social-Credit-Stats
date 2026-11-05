@@ -377,9 +377,9 @@
     const textOf = (o) => {
       const parts = [];
       for (const k of Object.keys(o)) {
-        if (!/(desc|detail|content|status|event|title|message|action|state|node|location|address|place|remark)/i.test(k) || typeof o[k] !== 'string') continue;
+        if (typeof o[k] !== 'string' || /(time|date|gmt|zone|url|link|icon|img|image|color|class|lang|^id$|Id$|type$)/i.test(k)) continue;
         const t = stripHtml(o[k]).trim();
-        if (t.length >= 2 && t.length <= 200 && !parts.includes(t)) parts.push(t);
+        if (t.length >= 2 && t.length <= 200 && !/^[\d\s:.\-/]+$/.test(t) && !/^https?:/i.test(t) && !parts.includes(t)) parts.push(t);
       }
       return parts.length ? parts.join(' · ').slice(0, 200) : null;
     };
@@ -418,9 +418,15 @@
         if (m && !/^\d{15,}$/.test(m[1])) { no = m[1]; break; }
       }
     }
-    if (trackPage && !delivered) delivered = (lines || []).some((l) => /^(배송\s*완료|배달\s*완료|수령\s*완료|delivered)$/i.test(String(l).trim()));
+    let domLast = null;
+    if (!delivered) {
+      // 상세/배송 조회 화면에는 최신 이벤트가 "시흥시 경기 / 배송 완료." 처럼 위치 줄 아래 단독 줄로 보인다 ("배송 완료 확인" 버튼 문구는 해당 없음)
+      const ls = (lines || []).map((l) => String(l).trim());
+      const i = ls.findIndex((l) => /^(배송\s*완료|배달\s*완료|수령\s*완료|delivered)\s*[.。]?$/i.test(l));
+      if (i >= 0) { delivered = true; domLast = (i > 0 && ls[i - 1].length <= 60 ? ls[i - 1] + ' · ' : '') + ls[i]; }
+    }
     if (!no && !last && !delivered) return null;
-    const out = { no, carrier, last: last ? { text: last.text, time: toISO(last.t, true) } : null };
+    const out = { no, carrier, last: last ? { text: last.text, time: toISO(last.t, true) } : (domLast ? { text: domLast, time: null } : null) };
     if (delivered) out.delivered = true;
     return out;
   }
@@ -496,7 +502,11 @@
     if (b.refund && !(keepA && a.refund)) out.refund = b.refund;
     if (b.store && !(keepA && a.store)) out.store = b.store;
     if (b.protectEnd) out.protectEnd = b.protectEnd;
-    if (b.track) out.track = b.track;
+    if (b.track) {                                   // 상세 화면과 배송 조회 화면의 결과를 합친다 (한쪽에 없는 값은 이전 값을 유지)
+      const o = a.track || {}, n = b.track;
+      out.track = { no: n.no || o.no || null, carrier: n.carrier || o.carrier || null, last: n.last || o.last || null };
+      if (n.delivered || o.delivered) out.track.delivered = true;
+    }
     if (b.trackAt) { out.trackAt = b.trackAt; out.trackV = b.trackV || out.trackV; }
     if (b.trackRaw) out.trackRaw = b.trackRaw;
     if (b.payment) out.payment = b.payment;

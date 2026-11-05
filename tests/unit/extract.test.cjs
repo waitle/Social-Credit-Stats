@@ -100,3 +100,20 @@ test('배송 조회 화면: 위치·상태가 따로 있는 이벤트와 현재 
   // 화면에 단독으로 "배송 완료"가 있는 경우
   assert.strictEqual(AES.extractDetail('1', ['배송 조회', '배송 완료', 'LP00112233445'], [], { ref, track: true }).tracking.delivered, true);
 });
+
+test('상세 화면의 "위치 + 배송 완료." 줄로 도착을 인식하고, 운송장 정보와 합쳐도 유지된다', () => {
+  const ref = new Date(2026, 10, 5, 18, 0);
+  const lines = ['예상 배송일: 2026년 11월 7일', '시흥시 경기', '배송 완료.', '삼성 S26 울트라 케이스', '배송 완료 확인'];
+  const t = AES.extractDetail('1', lines, [], { ref }).tracking;
+  assert.strictEqual(t.delivered, true);
+  assert.strictEqual(t.last.text, '시흥시 경기 · 배송 완료.');
+  assert.ok(AES.DELIVERED_EVENT.test(t.last.text));
+  assert.strictEqual(AES.extractDetail('1', ['배송 완료 확인', '배송 중'], [], { ref }).tracking, null);   // 버튼 문구만으로는 도착이 아니다
+  // 키 이름이 달라도 위치·상태 칸을 모두 이어 붙인다
+  const j = { data: { trackingNumber: '998006720488', list: [{ gmtTime: Date.parse('2026-11-05T17:07:00+09:00'), areaName: '시흥시 경기', standardDesc: '배송 완료.' }] } };
+  assert.match(AES.extractDetail('1', [], [{ url: 'x', text: JSON.stringify(j) }], { ref }).tracking.last.text, /배송 완료/);
+  // 상세 결과(번호 없음, 도착)와 배송 조회 결과(번호)를 합친다
+  const m = AES.mergeOrder({ id: '1', status: 'shipping', track: { no: '998006720488', carrier: null, last: { text: '출발', time: '2026-11-04T10:00' } } }, { id: '1', source: 'detail', track: t });
+  assert.strictEqual(m.track.no, '998006720488');
+  assert.strictEqual(m.track.delivered, true);
+});
