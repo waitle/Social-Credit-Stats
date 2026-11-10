@@ -5,6 +5,7 @@ const DETAIL_PATH = /\/p\/order\/detail/i.test(location.pathname);
 const TRACK_PATH = /\/p\/tracking\//i.test(location.pathname);                       // "배송 조회" 화면
 const DETAIL_AUTO = (DETAIL_PATH || TRACK_PATH) && /[?&]aesAuto=1/.test(location.search);    // 백그라운드 탭: 상세/배송 조회 화면에서 예상 배송일·운송장 읽기
 const LIST_AUTO = /\/p\/order\/index/i.test(location.pathname) && /[?&]aesAuto=list/.test(location.search);   // 백그라운드 탭: 자동 갱신
+const K = { orders: SITE.prefix + 'orders', settings: SITE.prefix + 'settings', counts: SITE.prefix + 'counts' };   // 저장 키 (사이트별)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 const NOISE_URL = /recommend|cart\.count|cookie\.render/i;
@@ -34,7 +35,7 @@ function coversCutoff(cutoff) {
 }
 const needsConfirm = (k) => isHeavy(k) && !coversCutoff(cutoffOf(k));
 function confirmHeavy(label) {
-  return confirm(`⚠ ${label} 내역을 불러옵니다.\n\n2달 이상의 내역은 로딩 시간이 길어지고, 알리익스프레스에서 봇 인증(보안 확인) 창이 뜰 수 있습니다.\n인증 창이 뜨면 인증을 완료한 뒤 다시 시도해 주세요.\n\n계속할까요?`);
+  return confirm(`⚠ ${label} 내역을 불러옵니다.\n\n2달 이상의 내역은 로딩 시간이 길어지고, ${IS_TB ? '타오바오' : '알리익스프레스'}에서 봇 인증(보안 확인) 창이 뜰 수 있습니다.\n인증 창이 뜨면 인증을 완료한 뒤 다시 시도해 주세요.\n\n계속할까요?`);
 }
 
 /** 지금까지 받은 페이지로 충분한가? 'cutoff'(기간 도달) / 'incremental'(이미 저장된 부분에 도달) / null(계속) */
@@ -82,7 +83,8 @@ function mergeCoverage(newFrom) {
 const store = {
   async load() {
     try {
-      const r = await chrome.storage.local.get(['orders', 'settings', 'counts']);
+      const r = await chrome.storage.local.get([K.orders, K.settings, K.counts]);
+      r.orders = r[K.orders]; r.settings = r[K.settings]; r.counts = r[K.counts];
       if (r.orders) {
         const fresh = state.orders;                       // 저장소 로딩 중 먼저 들어온 응답은 버리지 않고 병합
         state.orders = r.orders;
@@ -102,7 +104,7 @@ const store = {
   async flush() {                                   // 즉시 저장
     clearTimeout(store._t); store._t = null;
     if (store.locked) return;
-    try { await chrome.storage.local.set({ orders: state.orders, settings: state.settings, counts: state.counts }); } catch (_) {}
+    try { await chrome.storage.local.set({ [K.orders]: state.orders, [K.settings]: state.settings, [K.counts]: state.counts }); } catch (_) {}
   },
   save() { if (store.locked) return; clearTimeout(store._t); store._t = setTimeout(() => store.flush(), 300); },
   /** 저장된 주문과 그에 딸린 기록을 모두 지운다: 주문, 알리 집계(배송 중/배송 전), "어디까지 불러왔는지"(범위·이어받기 지점),
@@ -115,8 +117,8 @@ const store = {
     state.knownAtStart = new Set(); state.sessionIds = new Set(); state.lastPageOrders = [];
     state.cut = { cutoff: null, covered: false }; state.chain = null; state.endReason = '';
     try {
-      await chrome.storage.local.remove(['orders', 'counts', 'notifyState', 'healthQueue']);
-      await chrome.storage.local.set({ settings: state.settings });
+      await chrome.storage.local.remove(IS_TB ? [K.orders, K.counts] : [K.orders, K.counts, 'notifyState', 'healthQueue']);
+      await chrome.storage.local.set({ [K.settings]: state.settings });
     } catch (_) {}
   }
 };

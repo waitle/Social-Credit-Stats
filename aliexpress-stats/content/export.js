@@ -14,7 +14,7 @@ function exportCsv() {
   const q = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
   const head = ['주문번호', '주문일', '상태', '상품명', '분류', '수량', '단가', '통화', '링크'];
   const rows = s.purchases.map((p) => [p.orderId, p.date, AES.STATUS_LABEL[p.status] || p.status, p.title, p.category, p.qty, p.price ? p.price.amount : '', p.price ? (p.price.currency || s.primary) : '', p.url]);
-  download('aliexpress-orders.csv', '\ufeff' + [head, ...rows].map((r) => r.map(q).join(',')).join('\n'), 'text/csv');
+  download(IS_TB ? 'taobao-orders.csv' : 'aliexpress-orders.csv', '\ufeff' + [head, ...rows].map((r) => r.map(q).join(',')).join('\n'), 'text/csv');
 }
 function exportDebug() {
   const dump = {
@@ -28,13 +28,13 @@ function exportDebug() {
     domCards: state.cards.slice(0, 3),
     apiCaptures: state.captures.slice(-3).map((c) => ({ url: c.url, text: c.text.slice(0, 120000) }))
   };
-  download('aliexpress-stats-debug.json', JSON.stringify(dump, null, 2), 'application/json');
+  download(IS_TB ? 'taobao-stats-debug.json' : 'aliexpress-stats-debug.json', JSON.stringify(dump, null, 2), 'application/json');
 }
 
 /** 백업 파일: 주문 + 설정 + 알리 집계 (이 브라우저의 데이터를 다른 PC/설치 경로로 옮길 때) */
 function exportBackup() {
-  const data = { format: 'aliexpress-stats-backup', v: 1, at: new Date().toISOString(), orders: state.orders, settings: state.settings, counts: state.counts };
-  download(`aliexpress-stats-backup-${AES.toISO(new Date())}.json`, JSON.stringify(data), 'application/json');
+  const data = { format: 'aliexpress-stats-backup', site: SITE.id, v: 1, at: new Date().toISOString(), orders: state.orders, settings: state.settings, counts: state.counts };
+  download(`${IS_TB ? 'taobao' : 'aliexpress'}-stats-backup-${AES.toISO(new Date())}.json`, JSON.stringify(data), 'application/json');
 }
 
 /** 백업 파일 또는 이전 버전의 디버그 파일(parsedOrders)을 불러와 현재 데이터와 병합 */
@@ -46,7 +46,7 @@ function importBackup() {
     let data;
     try { data = JSON.parse(await f.text()); } catch (_) { state.progress = '복원 실패: JSON 파일이 아닙니다'; render(); return; }
     const n = restoreData(data);
-    state.progress = n >= 0 ? `복원 완료 · 주문 ${n}건 병합` : '복원 실패: 알 수 없는 형식';
+    state.progress = n >= 0 ? `복원 완료 · 주문 ${n}건 병합` : n === -2 ? '복원 실패: 다른 사이트(알리/타오바오)의 백업 파일입니다' : '복원 실패: 알 수 없는 형식';
     render();
   };
   input.click();
@@ -55,7 +55,10 @@ function importBackup() {
 /** 병합 규칙: 지금 데이터가 있으면 그 위에 백업 내용을 보강 (최신 상태 우선) */
 function restoreData(data) {
   let list = null;
-  if (data && data.format === 'aliexpress-stats-backup' && data.orders) list = Object.values(data.orders);
+  if (data && data.format === 'aliexpress-stats-backup' && data.orders) {
+    if ((data.site || 'ali') !== SITE.id) return -2;                                   // 다른 사이트의 백업은 섞지 않는다
+    list = Object.values(data.orders);
+  }
   else if (data && Array.isArray(data.parsedOrders)) list = data.parsedOrders;       // v1.x 디버그 파일
   if (!list) return -1;
   for (const o of list) {

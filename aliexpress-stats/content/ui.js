@@ -6,9 +6,12 @@ let host = null, root = null, panel = null, fab = null;
 const CSS = `
 :host{all:initial}
 *{box-sizing:border-box}
-.w{--bg:#fff;--fg:#1d1d1f;--mu:#6b7280;--bd:#e5e7eb;--card:#f7f7f9;--ac:#e62e2e;--ac2:#2563eb;--ok:#16a34a;--wa:#d97706;
+.w{--bg:#fff;--fg:#1d1d1f;--mu:#6b7280;--bd:#e5e7eb;--card:#f7f7f9;--ac:#e62e2e;--red:#e62e2e;--ac2:#2563eb;--ok:#16a34a;--wa:#d97706;
    font:13px/1.45 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",Roboto,sans-serif;color:var(--fg)}
-@media(prefers-color-scheme:dark){.w{--bg:#18181b;--fg:#f4f4f5;--mu:#a1a1aa;--bd:#33333a;--card:#232328;--ac:#ff5a5a;--ac2:#60a5fa;--ok:#4ade80;--wa:#fbbf24}}
+@media(prefers-color-scheme:dark){.w{--bg:#18181b;--fg:#f4f4f5;--mu:#a1a1aa;--bd:#33333a;--card:#232328;--ac:#ff5a5a;--red:#ff5a5a;--ac2:#60a5fa;--ok:#4ade80;--wa:#fbbf24}}
+/* 타오바오에서는 강조색만 타오바오 주황으로 (경고용 빨강 --red 는 그대로) */
+.w.tb{--ac:#ff5000}
+@media(prefers-color-scheme:dark){.w.tb{--ac:#ff7a33}}
 .fab{position:fixed;right:18px;bottom:18px;background:var(--ac);color:#fff;border:0;border-radius:999px;padding:11px 16px;font:600 13px inherit;font-family:inherit;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.28)}
 .fab:hover{filter:brightness(1.08)}
 .panel{position:fixed;top:0;right:0;height:100vh;width:min(470px,100vw);background:var(--bg);border-left:1px solid var(--bd);box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column;transform:translateX(105%);transition:transform .22s ease}
@@ -69,11 +72,12 @@ h2{font-size:13px;margin:16px 0 8px}
 .row .ph{width:52px;height:52px;border-radius:8px;background:var(--card);flex:none}
 .row .m{flex:1;min-width:0}
 .row .ti{font-weight:500;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:inherit;text-decoration:none}
+.trn{font-size:12px;color:var(--mu);line-height:1.3;margin-top:2px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .row .sub{color:var(--mu);font-size:12px;margin-top:4px}
 .row .eta{font-weight:600}
 .badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;margin-right:4px}
 .b-wait{background:#fef3c7;color:#92400e}.b-ship{background:#dbeafe;color:#1e40af}.b-done{background:#dcfce7;color:#166534}.b-cancel{background:#e5e7eb;color:#374151}
-.dd{color:var(--ac);margin-left:6px;font-weight:700}
+.dd{color:var(--red);margin-left:6px;font-weight:700}
 .muted{color:var(--mu);font-weight:400}
 .empty{text-align:center;color:var(--mu);padding:40px 10px;line-height:1.7}
 input.s{width:100%;padding:7px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit;margin-bottom:8px}
@@ -93,7 +97,7 @@ label.st select{padding:3px 6px;border:1px solid var(--bd);border-radius:6px;bac
 label.st input{width:70px;padding:3px 6px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--fg)}
 .alert{border-radius:10px;padding:10px 12px;margin-bottom:10px;background:var(--card)}
 .alert .h{display:flex;justify-content:space-between;font-weight:600;font-size:12.5px;margin-bottom:2px}
-.alert.red .h{color:var(--ac)}.alert.amber .h{color:var(--wa)}
+.alert.red .h{color:var(--red)}.alert.amber .h{color:var(--wa)}
 .alert a,.alert .ln{display:flex;justify-content:space-between;gap:8px;color:inherit;text-decoration:none;font-size:12px;padding:4px 0}
 .alert a span:first-child,.alert .ln span:first-child{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
 .alert a b{flex:none}
@@ -124,7 +128,7 @@ function initUI() {
   root = host.attachShadow({ mode: 'open' });
   (document.body || document.documentElement).appendChild(host);
   if (!document.body) document.addEventListener('DOMContentLoaded', () => document.body.appendChild(host));
-  root.innerHTML = `<style>${CSS}</style><div class="w"><button class="fab" data-act="toggle">알리 통계</button><div class="panel" id="p"></div></div>`;
+  root.innerHTML = `<style>${CSS}</style><div class="w${IS_TB ? ' tb' : ''}"><button class="fab" data-act="toggle">${SITE.name} 통계</button><div class="panel" id="p"></div></div>`;
   panel = root.getElementById('p');
   fab = root.querySelector('.fab');
   bindEvents();
@@ -178,7 +182,7 @@ function viewSummary(s) {
   const cats = s.categories.slice(0, 8);
   const months = s.monthly;                      // 전체 개월 표시 (12개월 제한 없음)
   const discNote = s.discountOrders ? `${s.discountOrders}건` : '없음';
-  return countsBanner() + loadedNote(s) + alertsView(s) + `
+  return countsBanner() + loadedNote(s) + alertsView(s) + tbNote() + trNote() + `
   <div class="grid">
     <div class="kpi"><div class="l">구매한 상품</div><div class="v">${s.itemCount}개</div><div class="s">주문 ${s.orderCount}건</div></div>
     <div class="kpi"><div class="l">총 결제액</div><div class="v">${esc(moneyMap(s.spent, s.primary))}</div><div class="s">주문당 ${s.primaryOrders ? esc(money((s.spent[s.primary] || 0) / s.primaryOrders, s.primary)) : '-'}</div></div>
@@ -206,7 +210,7 @@ function viewShipping(s) {
     <a class="row" href="${esc(orderUrl(r.orderId))}" target="_blank" rel="noopener" title="주문 상세 열기">
       ${thumb(r.image)}
       <div class="m">
-        <div class="ti">${esc(r.title)}</div>
+        ${tiDiv(r.title)}
         <div class="sub">${badge(r.status)}${r.qty > 1 ? `${r.qty}개 · ` : ''}주문일 ${fmtDate(r.orderDate)}${r.awaitingConfirm ? '<span class="tag blue" title="배송 조회상 도착했지만 아직 \'배송 완료 확인\'을 누르지 않은 주문">수령 확인 대기</span>' : ''}${r.groupSize ? `<span class="tag blue" title="같은 운송장으로 함께 오는 주문">합배송 ${r.groupSize}건</span>` : ''}${paymentTag(r.payment)}${protectTag(r)}${r.deliveredAt ? ` · 도착 ${fmtShort(r.deliveredAt)}` : ''}</div>
         ${r.status === 'delivered' ? '' : etaLine(r)}
         ${trackLine(r.track)}
@@ -217,24 +221,28 @@ function viewShipping(s) {
 /** 잔여 환불 예정 금액(크게) + 환불 완료 금액을 한 카드에 */
 function refundBanner(s) {
   const c = s.refundCount; if (!c.processing && !c.done) return '';
+  const est = (st) => (s.refunds.some((r) => r.state === st && r.estimated) ? '약 ' : '');   // 환율로 환산한 금액이 섞여 있으면
   return `<div class="sum">
-    <div><div class="l">잔여 환불 예정 금액</div><div class="v big">${c.processing ? esc(moneyMap(s.refundSum.processing, s.primary)) : '없음'}</div><div class="s">${c.processing ? `진행 중 ${c.processing}건` : '진행 중인 환불 없음'}</div></div>
-    <div><div class="l">환불 완료</div><div class="v">${c.done ? esc(moneyMap(s.refundSum.done, s.primary)) : '-'}</div><div class="s">${c.done}건</div></div>
+    <div><div class="l">잔여 환불 예정 금액</div><div class="v big">${c.processing ? est('processing') + esc(moneyMap(s.refundSum.processing, s.primary)) : '없음'}</div><div class="s">${c.processing ? `진행 중 ${c.processing}건` : '진행 중인 환불 없음'}</div></div>
+    <div><div class="l">환불 완료</div><div class="v">${c.done ? est('done') + esc(moneyMap(s.refundSum.done, s.primary)) : '-'}</div><div class="s">${c.done}건</div></div>
   </div>`;
 }
 const REFUND_BADGE = { processing: ['환불 진행 중', 'b-wait', 'p'], done: ['환불 완료', 'b-done', 'd'], none: ['환불 없음', 'b-cancel', 'n'] };
-const AMT_SRC = { shown: '알리가 표시한 환불 금액', paid: '실제 결제한 총 금액 기준', list: '상품 표시가 기준' };
+// "환불 없음"에는 환불 정보를 못 읽은 주문도 들어가므로 툴팁으로 범위를 알린다
+const REFUND_NONE_TIP = '결제 전 취소, 환불 요청 종료(거절·철회), 또는 환불 정보를 찾지 못한 주문';
+const AMT_SRC = { shown: `${SITE.name}가 표시한 환불 금액`, paid: '실제 결제한 총 금액 기준', item: '환불된 상품의 결제 금액 기준', list: '상품 표시가 기준' };
 function viewRefunds(s) {
   if (!s.refunds.length) return '<div class="empty">취소·환불된 주문이 없습니다</div>';
   return refundBanner(s) +
     s.refunds.map((r) => {
       const [t, cls, ac] = REFUND_BADGE[r.state];
-      const amt = r.state !== 'none' && r.amount ? esc(money(r.amount.amount, r.amount.currency || s.primary)) : '—';
-      return `<a class="rf" href="${esc(orderUrl(r.orderId))}" target="_blank" rel="noopener" title="${esc(AMT_SRC[r.amountSrc] || '')} · 클릭하면 주문 상세 열기">
+      const amt = r.state !== 'none' && r.amount ? (r.estimated ? '약 ' : '') + esc(money(r.amount.amount, r.amount.currency || s.primary)) : '—';
+      const tip = [AMT_SRC[r.amountSrc] || '', r.estimated ? '환율로 환산한 추정 금액' : ''].filter(Boolean).join(' · ');
+      return `<a class="rf" href="${esc(orderUrl(r.orderId))}" target="_blank" rel="noopener" title="${esc(tip)} · 클릭하면 주문 상세 열기">
         ${thumb(r.image)}
         <div style="min-width:0">
-          <div class="ti">${esc(r.title)}</div>
-          <div class="sub"><span class="badge ${cls}" style="margin:0">${t}</span><span class="muted">${fmtShort(r.date)}</span></div>
+          ${tiDiv(r.title)}
+          <div class="sub"><span class="badge ${cls}" style="margin:0"${r.state === 'none' ? ` title="${REFUND_NONE_TIP}"` : ''}>${t}</span>${r.partial ? '<span class="tag" title="주문의 일부 상품만 환불됨. 나머지 상품은 구매 내역과 결제액에 그대로 포함">일부 상품</span>' : ''}<span class="muted">${fmtShort(r.date)}</span></div>
           <div class="sub pay">${r.payment ? `결제수단 <b>${esc(r.payment)}</b>` : '<span class="muted">결제수단 확인 전</span>'}</div>
         </div>
         <div class="amt ${ac}">${amt}</div>
@@ -251,7 +259,7 @@ function viewPurchases(s) {
       <a class="row" href="${esc(orderUrl(p.orderId))}" target="_blank" rel="noopener" title="주문 상세 열기">
         ${thumb(p.image)}
         <div class="m">
-          <div class="ti">${esc(p.title)}</div>
+          ${tiDiv(p.title)}
           <div class="sub">${badge(p.status)}${fmtDate(p.date, true)}</div>
           <div class="sub">${p.price ? esc(money(p.price.amount, p.price.currency || s.primary)) : '-'}${p.qty > 1 ? ` × ${p.qty}` : ''}</div>
         </div>
@@ -260,14 +268,15 @@ function viewPurchases(s) {
     </div>`).join('') + (rows.length > 300 ? `<div class="note">${rows.length}개 중 300개 표시</div>` : '');
 }
 
-const orderUrl = (id) => `${location.origin}/p/order/detail.html?orderId=${encodeURIComponent(id)}`;
+const orderUrl = orderPageUrl;
 const thumb = (src) => (src && state.settings.thumbs !== false ? `<img src="${esc(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : '<div class="ph"></div>');
 
 function computeNow() {
-  return AES.computeStats(state.orders, AES.statsOptions(state.settings, { since: cutoffOf(state.settings.period || '1w') }));
+  const since = cutoffOf(state.settings.period || '1w');
+  return AES.computeStats(state.orders, IS_TB ? AES.taobao.statsOptionsFor(state.settings, state.orders, { since }) : AES.statsOptions(state.settings, { since }));
 }
 
-function render() { if (selectFocused()) { renderDeferred = true; return; } renderNow(); }
+function render() { trKick(); if (selectFocused()) { renderDeferred = true; return; } renderNow(); }
 function renderNow() {
   if (!panel) return;                              // 백그라운드 갱신 탭에는 패널이 없다
   const s = computeNow();
@@ -284,10 +293,11 @@ function renderNow() {
   const spin = `<i class="spin" style="animation-delay:${phase(900)}"></i>`;
   const period = state.settings.period || '1w', rs = state.settings.resume;
   const resumable = !state.loading && !!(rs && rs.oldest) && !coversCutoff(cutoffOf(period));
-  const autoRate = s.estimatedRates.USD ? Math.round(s.estimatedRates.USD) : '';
+  const cnyAuto = IS_TB ? AES.taobao.estimateCnyKrw(state.orders) : null;
+  const autoRate = IS_TB ? (cnyAuto ? cnyAuto.toFixed(1) : '') : (s.estimatedRates.USD ? Math.round(s.estimatedRates.USD) : '');
   panel.className = 'panel' + (state.open ? ' open' : '');
   panel.innerHTML = `
-    <header><h1>알리 주문 통계</h1><button class="x" data-act="toggle" title="닫기">×</button></header>
+    <header><h1>${SITE.name} 주문 통계</h1><button class="x" data-act="toggle" title="닫기">×</button></header>
     <div class="lbar ${busy ? 'on' : ''}" style="--d:${phase(1400)}"></div>
     <div class="tabs">${tabs.map(([k, t]) => `<button class="tab ${state.tab === k ? 'on' : ''}" data-tab="${k}">${t}</button>`).join('')}</div>
     <div class="body">${body}</div>
@@ -305,8 +315,10 @@ function renderNow() {
         <label class="st" title="체크하면 기간과 무관하게 배송 대기·진행 중인 주문을 모두 불러옵니다 (최대 75일 전까지)"><input type="checkbox" data-input="ship" ${state.settings.includeShipping !== false ? 'checked' : ''} style="width:auto"> 배송 중 주문 항상 포함</label>
         <label class="st" title="주문 목록 페이지를 열면 통계 패널을 바로 펼칩니다. 끄면 오른쪽 아래 버튼을 눌러 열 때까지 접혀 있습니다"><input type="checkbox" data-input="autoOpen" ${state.settings.autoOpen !== false ? 'checked' : ''} style="width:auto"> 주문 페이지에서 패널 자동 펼치기</label>
         <label class="st" title="주문 페이지를 열면 자동으로 목록 + 예상 배송일을 수집"><input type="checkbox" data-input="auto" ${state.settings.auto === true ? 'checked' : ''} style="width:auto"> 자동 실행</label>
+        <label class="st" title="크롬 내장 번역으로 중국어·영어 상품명을 한국어로 보여 줍니다 (모델 준비와 표시 방식은 확장 설정 페이지)"><input type="checkbox" data-input="trOn" ${TR.cfg.enabled ? 'checked' : ''} style="width:auto"> 상품명 번역</label>
+        <label class="st" title="체크하면 원문 대신 번역만 보여 줍니다 (원문은 마우스를 올리면). 끄면 원문 아래에 번역을 함께 보여 줍니다"><input type="checkbox" data-input="trRep" ${TR.cfg.mode !== 'below' ? 'checked' : ''} style="width:auto"> 원문 대신 번역 표시</label>
         <label class="st"><input type="checkbox" data-input="thumbs" ${state.settings.thumbs !== false ? 'checked' : ''} style="width:auto"> 썸네일</label>
-        <label class="st" title="비워두면 같은 상품의 두 통화 가격으로 자동 추정">USD 환율(원) <input type="number" min="500" max="3000" placeholder="${autoRate || '자동'}" value="${state.settings.usdRate > 0 ? state.settings.usdRate : ''}" data-input="fx"></label>
+        ${IS_TB ? `<label class="st" title="비워두면 원화로 결제한 주문의 (결제액 ÷ 위안 금액)으로 자동 추정">위안→원 환율 <input type="number" min="50" max="1000" step="0.1" placeholder="${autoRate || '자동'}" value="${state.settings.cnyRate > 0 ? state.settings.cnyRate : ''}" data-input="fxcny"></label>` : `<label class="st" title="비워두면 같은 상품의 두 통화 가격으로 자동 추정">USD 환율(원) <input type="number" min="500" max="3000" placeholder="${autoRate || '자동'}" value="${state.settings.usdRate > 0 ? state.settings.usdRate : ''}" data-input="fx"></label>`}
         <label class="st" title="같은 상점·같은 날 주문 합계 또는 주문 1건이 이 금액을 넘으면 경고">관세 한도($) <input type="number" min="1" max="10000" value="${state.settings.customsLimit || 150}" data-input="customs"></label>
         <label class="st" title="구매자 보호 기간 종료까지 남은 일수가 이 값 이하이면 경고">보호 기간 경고(일) <input type="number" min="1" max="60" value="${state.settings.protectDays != null ? state.settings.protectDays : 7}" data-input="protectDays"></label>
         <div class="sep"></div>
@@ -347,6 +359,7 @@ async function resetAll() {
 /** "불러오기" 버튼. 이미 불러온 범위 안이면 이 화면의 1페이지는 열 때 받은 것이라 오래됐을 수 있으므로, 페이지를 새로 열어 최신 주문부터 다시 확인한다 */
 function requestLoad() {
   if (state.loading) return;
+  if (IS_TB) { loadAll(); return; }                              // 타오바오는 1페이지도 직접 다시 받으므로 페이지를 새로 열 필요가 없다
   if (coversCutoff(cutoffOf(state.settings.period || '1w'))) {
     state.progress = '최신 주문을 확인하려고 페이지를 새로 엽니다…'; renderNow();
     try { sessionStorage.setItem('aes-run-once', '1'); } catch (_) {}
@@ -359,7 +372,8 @@ function requestLoad() {
 /** 새로고침: 페이지를 새로 열어 최근 주문 목록(첫 페이지 + 추가분)을 받고, 배송 대기·진행 주문의 배송 현황도 모두 다시 조회한다 */
 function requestRefresh() {
   releaseHold();
-  if (state.loading || !/\/p\/order\/index/i.test(location.pathname)) { fetchDetails(true); return; }   // 목록을 받는 중이거나 주문 목록 페이지가 아니면 배송 현황만
+  if (IS_TB) { tbRefresh(); return; }
+  if (state.loading || !isListPage()) { fetchDetails(true); return; }   // 목록을 받는 중이거나 주문 목록 페이지가 아니면 배송 현황만
   state.progress = '최근 주문과 배송 현황을 새로 불러오려고 페이지를 새로 엽니다…'; state.progressDetail = ''; renderNow();
   try { sessionStorage.setItem('aes-run-once', 'refresh'); } catch (_) {}
   store.flush().then(() => location.reload());
@@ -406,19 +420,25 @@ function bindEvents() {
     }
     if (t.dataset.input === 'autoOpen') { state.settings.autoOpen = !!t.checked; store.save(); }
     if (t.dataset.input === 'auto') { state.settings.auto = !!t.checked; store.save(); }
+    if (t.dataset.input === 'trOn') { TR.cfg.enabled = !!t.checked; TR.tried.clear(); try { chrome.storage.local.set({ trSettings: Object.assign({}, TR.cfg, { enabled: !!t.checked }) }); } catch (_) {} renderNow(); trKick(); }
+    if (t.dataset.input === 'trRep') { TR.cfg.mode = t.checked ? 'replace' : 'below'; try { chrome.storage.local.set({ trSettings: Object.assign({}, TR.cfg) }); } catch (_) {} renderNow(); }
     if (t.dataset.input === 'thumbs') { state.settings.thumbs = !!t.checked; store.save(); renderNow(); }
   });
   // 숫자 설정(환율, 관세 한도, 보호 기간 경고)은 입력하는 도중에는 반영하지 않고, 입력을 마쳤을 때(Enter/포커스 이동)만 범위를 확인해 저장한다.
   // 글자마다 저장하면 중간 값(1, 14, 140…)으로 경고가 계산돼 알림이 쏟아진다.
   root.addEventListener('change', (e) => {
     const t = e.target, k = t.dataset && t.dataset.input;
-    if (k !== 'fx' && k !== 'customs' && k !== 'protectDays') return;
+    if (k !== 'fx' && k !== 'fxcny' && k !== 'customs' && k !== 'protectDays') return;
     const raw = String(t.value).trim(), v = parseFloat(raw);
     const reject = (msg) => { t.blur(); state.progress = msg; renderNow(); };
     if (k === 'fx') {
       if (raw === '') state.settings.usdRate = null;
       else if (!(v >= 300 && v <= 5000)) return reject('환율은 300~5000 사이로 입력하세요');
       else state.settings.usdRate = v;
+    } else if (k === 'fxcny') {
+      if (raw === '') state.settings.cnyRate = null;
+      else if (!(v >= 50 && v <= 1000)) return reject('위안 환율은 50~1000 사이로 입력하세요');
+      else state.settings.cnyRate = v;
     } else if (k === 'customs') {
       if (!(v >= 1 && v <= 10000)) return reject('관세 한도는 1~10000 사이로 입력하세요');
       state.settings.customsLimit = v;

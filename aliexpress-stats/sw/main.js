@@ -1,15 +1,15 @@
 // 알리 주문 통계 - 서비스 워커 진입점
 'use strict';
-importScripts('../lib/core.js', '../lib/extract.js', '../lib/stats.js',
+importScripts('../lib/core.js', '../lib/extract.js', '../lib/stats.js', '../lib/taobao.js',
   'util.js', 'detail-tabs.js', 'badge.js', 'notify.js', 'refresh.js', 'update.js', 'server.js');
 
-const onDataChanged = debounceSw(async () => { await refreshBadge(); await checkNotifications(); }, 2000);
+const onDataChanged = debounceSw(async () => { await refreshBadge(); await checkNotifications(); await checkNotifications('taobao'); }, 2000);
 function debounceSw(fn, ms) { let t; return () => { clearTimeout(t); t = setTimeout(fn, ms); }; }
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-  if (changes.orders || changes.counts || changes.updateInfo) onDataChanged();
-  if (changes.settings) { scheduleAlarms(); onDataChanged(); }
+  if (changes.orders || changes.counts || changes.updateInfo || changes.tb_orders) onDataChanged();
+  if (changes.settings || changes.tb_settings) { scheduleAlarms(); onDataChanged(); }
 });
 
 chrome.alarms.onAlarm.addListener(async (a) => {
@@ -18,7 +18,7 @@ chrome.alarms.onAlarm.addListener(async (a) => {
   else if (a.name === 'aes-daily') { await fetchServerConfig(); await checkRemoteVersion(); await flushHealth(); refreshBadge(); }
 });
 
-chrome.runtime.onInstalled.addListener(async () => { await scheduleAlarms(); refreshBadge(); checkNotifications(); checkRemoteVersion(); fetchServerConfig(); });
+chrome.runtime.onInstalled.addListener(async () => { await scheduleAlarms(); refreshBadge(); checkNotifications(); checkNotifications('taobao'); checkRemoteVersion(); fetchServerConfig(); });
 chrome.runtime.onStartup.addListener(async () => { await scheduleAlarms(); if (!(await checkSelfReload()).reload) refreshBadge(); });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

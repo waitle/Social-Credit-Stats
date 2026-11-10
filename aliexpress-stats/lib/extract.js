@@ -547,13 +547,16 @@
     else if (out.status === 'delivered' && !out.deliveredAt && a.status && a.status !== 'delivered' && a.status !== 'unknown') { out.deliveredAt = toISO(new Date(), true); out.deliveredSrc = 'observed'; }
     if (b.detailAt) { out.detailAt = b.detailAt; out.detailRaw = b.detailRaw || out.detailRaw; }
     out.items = keepA && (a.items || []).length ? a.items : mergeItems(a.items || [], b.items || []);
+    for (const k of AES.MERGE_EXTRA) if (b[k] !== undefined && b[k] !== null) out[k] = b[k];   // 사이트별 추가 필드 (타오바오 등)
     out.raw = b.raw || a.raw;
     out.source = a.source === b.source ? a.source : (a.source === 'api' || b.source === 'api' ? 'api' : 'both');
+    if (AES.MERGE_POST) AES.MERGE_POST(out, a, b);
     out.updated = Date.now();
     return out;
   }
 
 
+  AES.MERGE_EXTRA = AES.MERGE_EXTRA || [];
   Object.assign(AES, { KEY_STORE, KEY_TRACKNO, KEY_CARRIER, TRACK_LABEL, DELIVERED_EVENT, pickTracking, pickPayment, ORDER_ID_RE, ITEM_HREF_RE, qtyFromText, isStrike, scrapeDom, ID_KEYS, isId, firstOf, itemFromObject, KEY_DATE, KEY_STATUS, KEY_TOTAL, KEY_TOTAL_EXCL, KEY_DISC, KEY_DISC_EXCL, KEY_ETA, epochToDate, stripHtml, subtreeStrings, refundState, refundFromObject, refundAmountFromObject, refundFromLines, finishRefund, findListMeta, extractFromJson, extractDetail, parseResponseText, itemKey, mergeItems, mergeOrder });
   if (typeof module !== 'undefined' && module.exports) module.exports = AES;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

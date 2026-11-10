@@ -2,6 +2,7 @@
 // 콘텐츠 스크립트들은 같은 스코프를 공유한다 (manifest 순서대로 로드). 실제 초기화는 main.js 에서만 한다.
 'use strict';
 function scanDom(force) {
+  if (IS_TB) return 0;                       // 타오바오는 화면을 읽지 않고 API 응답만 쓴다
   try {
     if (!document.body || state.hold) return 0;
     if (force !== true && state.listAt && !DETAIL_PATH) return 0; // API 로 받은 데이터가 있으면 DOM 스캔 불필요
@@ -16,6 +17,7 @@ const hookCache = new Map();
 /** 응답 1건 처리. 추출된 주문 배열을 반환 (같은 응답이 훅/직접호출 양쪽으로 와도 한 번만 파싱) */
 function onHook(url, text) {
   if (typeof text !== 'string') return [];
+  if (IS_TB) return tbOnHook(url, text);
   const key = text.length + ':' + text.slice(0, 60) + ':' + text.slice(-60);
   if (hookCache.has(key)) return hookCache.get(key);
   const json = AES.parseResponseText(text);

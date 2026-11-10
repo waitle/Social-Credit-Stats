@@ -93,6 +93,7 @@ function tabFetch(ids, kind) {
 }
 
 async function fetchDetails(force) {
+  if (IS_TB) return tbFetchDetails(force);
   if (state.detail || state.detailBusy) { state.detailRerun = true; return; }     // 진행 중이면 끝난 뒤 새로 발견된 주문도 이어서 처리
   state.cancelDetail = false; state.detailBusy = true;
   try {

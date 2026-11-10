@@ -262,6 +262,7 @@ function findMoreButton() {
 
 /** opts.auto: 페이지를 열 때 자동 실행 / opts.confirmed: 이미 경고를 확인함 */
 async function loadAll(opts = {}) {
+  if (IS_TB) return tbLoadAll(opts);
   if (state.loading) return;
   releaseHold();
   let key = state.settings.period || '1w';

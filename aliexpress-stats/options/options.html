@@ -27,6 +27,23 @@
 </section>
 
 <section>
+  <h2>상품명 번역</h2>
+  <div class="muted">크롬 내장 번역(기기 안에서 실행)으로 상품명을 한국어로 바꿔 보여 줍니다. 상품명은 외부로 전송되지 않습니다. 중국어·영어 상품명만 번역하고 한글은 그대로 둡니다.</div>
+  <label class="row"><input type="checkbox" id="trOn"> 상품명 번역 사용</label>
+  <div class="line">
+    <select id="trMode">
+      <option value="replace">번역으로 바꿔 표시 (원문은 마우스를 올리면)</option>
+      <option value="below">원문 아래에 번역 함께 표시</option>
+    </select>
+  </div>
+  <div class="line">
+    <button class="b" id="trPrep">번역 모델 준비 / 확인</button>
+    <button class="b" id="trClear">번역 기록 지우기</button>
+  </div>
+  <div class="status" id="trStatus"></div>
+</section>
+
+<section>
   <h2>백그라운드 자동 갱신</h2>
   <div class="line">
     <select id="bg">
@@ -76,6 +93,7 @@
 <script src="../lib/core.js"></script>
 <script src="../lib/extract.js"></script>
 <script src="../lib/stats.js"></script>
+<script src="../lib/taobao.js"></script>
 <script src="../lib/backup.js"></script>
 <script src="options.js"></script>
 </body>

@@ -17,13 +17,14 @@
   (async () => {
     await store.load();
     applyRemoteConfig();
-    if (/\/p\/order\/index/i.test(location.pathname)) { if (state.settings.autoOpen !== false) state.open = true; if (state.settings.lastOrigin !== location.origin) { state.settings.lastOrigin = location.origin; store.save(); } }
+    trInit();
+    if (isListPage()) { if (state.settings.autoOpen !== false) state.open = true; if (state.settings.lastOrigin !== location.origin) { state.settings.lastOrigin = location.origin; store.save(); } }
     render();
     scanDom();
     setTimeout(scanDom, 1500);
     setTimeout(scanDom, 4000);
     // 자동 실행(기본 꺼짐)을 켰거나 "불러오기"로 새로 연 경우: 목록 → 예상 배송일 조회까지 진행
-    if (/\/p\/order\/index/i.test(location.pathname) && (state.settings.auto === true || runOnce)) {
+    if (isListPage() && (state.settings.auto === true || runOnce)) {
       const t0 = Date.now();
       while (!state.listAt && Date.now() - t0 < 10000) await sleep(60);    // 첫 페이지 응답 대기
       if (!state.loading) { fetchDetails(runOnce === 'refresh'); loadAll({ auto: true }); }   // 예상 배송일 조회는 목록 로딩과 동시에 진행 (새로고침이면 배송 중 주문 전부 다시 조회)

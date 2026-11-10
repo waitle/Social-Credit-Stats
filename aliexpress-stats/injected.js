@@ -82,7 +82,8 @@
       let done = false;
       const fin = (ok, json) => { if (!done) { done = true; reply(ok, json); } };
       const ret = fn.call(window.lib.mtop, d.opts, (res) => fin(true, res), (err) => fin(false, err));
-      if (ret && typeof ret.then === 'function') ret.then((res) => fin(true, res), (err) => fin(false, err));
+      // 알리는 Promise, 타오바오는 콜백 방식이다. 타오바오의 Promise 는 undefined 로 먼저 끝나므로 값이 있을 때만 쓴다
+      if (ret && typeof ret.then === 'function') ret.then((res) => { if (res !== undefined) fin(true, res); }, (err) => { if (err !== undefined) fin(false, err); });
     } catch (err) { reply(false, { error: String(err) }); }
   });
 

@@ -13,6 +13,9 @@ async function init() {
   $('ver').textContent = `버전 ${chrome.runtime.getManifest().version}`;
   const nf = Object.assign({}, NOTIFY_DEFAULT, s.notify || {});
   document.querySelectorAll('[data-notify]').forEach((el) => { el.checked = !!nf[el.dataset.notify]; });
+  const { trSettings = {} } = await chrome.storage.local.get('trSettings');
+  $('trOn').checked = !!trSettings.enabled;
+  $('trMode').value = trSettings.mode === 'below' ? 'below' : 'replace';
   $('bg').value = String(s.bgRefreshHours || 0);
   $('bgLast').textContent = s.lastBgRefresh ? `마지막 갱신 ${new Date(s.lastBgRefresh.at).toLocaleString('ko-KR')} (${s.lastBgRefresh.result})` : '';
   $('updSrc').value = s.updateSource || '';
@@ -22,8 +25,14 @@ async function init() {
   $('tel').checked = !!(s.server && s.server.telemetry);
 }
 
+async function patchTr(fn) { const { trSettings = {} } = await chrome.storage.local.get('trSettings'); fn(trSettings); await chrome.storage.local.set({ trSettings }); }
+const TR_PAIRS = [['zh', '중국어'], ['en', '영어']];
+const TR_STATE = { available: '준비됨', downloadable: '내려받기 필요', downloading: '내려받는 중', unavailable: '지원 안 함' };
+
 document.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.id === 'trOn') return patchTr((x) => { x.enabled = t.checked; });
+  if (t.id === 'trMode') return patchTr((x) => { x.mode = t.value; });
   if (t.dataset.notify) await patchSettings((s) => { s.notify = Object.assign({}, NOTIFY_DEFAULT, s.notify || {}, { [t.dataset.notify]: t.checked }); });
   else if (t.id === 'bg') { await patchSettings((s) => { s.bgRefreshHours = Number(t.value) || 0; }); chrome.runtime.sendMessage({ type: 'rescheduleAlarms' }); }
   else if (t.id === 'updSrc') await patchSettings((s) => { s.updateSource = t.value.trim() || undefined; });
@@ -80,9 +89,9 @@ $('bkUp').onclick = async () => {
   try {
     $('bkStatus').textContent = '암호화하는 중…';
     const keys = await keysFromInput();
-    const { orders = {}, settings = {}, counts = null } = await chrome.storage.local.get(['orders', 'settings', 'counts']);
-    const n = await AES.uploadBackup(base, keys, { format: 'aliexpress-stats-backup', v: 1, at: new Date().toISOString(), orders, settings, counts });
-    $('bkStatus').textContent = `백업 완료 · 주문 ${Object.keys(orders).length}건, 암호문 ${(n / 1024).toFixed(1)}KB`;
+    const { orders = {}, settings = {}, counts = null, tb_orders: tbOrders = {}, tb_settings: tbSettings = {} } = await chrome.storage.local.get(['orders', 'settings', 'counts', 'tb_orders', 'tb_settings']);
+    const n = await AES.uploadBackup(base, keys, { format: 'aliexpress-stats-backup', v: 1, at: new Date().toISOString(), orders, settings, counts, taobao: { orders: tbOrders, settings: tbSettings } });
+    $('bkStatus').textContent = `백업 완료 · 알리 ${Object.keys(orders).length}건 + 타오바오 ${Object.keys(tbOrders).length}건, 암호문 ${(n / 1024).toFixed(1)}KB`;
   } catch (err) { $('bkStatus').textContent = err.message; }
 };
 
@@ -102,9 +111,40 @@ $('bkDown').onclick = async () => {
       n++;
     }
     const settings = Object.assign({}, data.settings || {}, cur.settings || {});   // 이 브라우저의 설정을 우선
-    await chrome.storage.local.set({ orders, settings, counts: cur.counts || data.counts || null });
+    const set = { orders, settings, counts: cur.counts || data.counts || null };
+    const tbIn = data.taobao && data.taobao.orders;
+    if (tbIn) {                                                       // 타오바오 데이터가 들어 있는 백업이면 함께 병합
+      const curTb = await chrome.storage.local.get(['tb_orders', 'tb_settings']);
+      const tbOrders = curTb.tb_orders || {};
+      for (const o of Object.values(tbIn)) { if (!o || !o.id) continue; tbOrders[o.id] = tbOrders[o.id] ? AES.mergeOrder(o, tbOrders[o.id]) : o; n++; }
+      set.tb_orders = tbOrders;
+      set.tb_settings = Object.assign({}, data.taobao.settings || {}, curTb.tb_settings || {});
+    }
+    await chrome.storage.local.set(set);
     $('bkStatus').textContent = `복원 완료 · 주문 ${n}건 병합`;
   } catch (err) { $('bkStatus').textContent = err.message; }
 };
 
 init();
+
+/** 번역 모델 상태 확인 + 필요하면 내려받기 (내려받기는 사용자 클릭 안에서만 허용된다) */
+$('trPrep').onclick = async () => {
+  const out = $('trStatus');
+  if (!window.Translator || !Translator.availability) { out.textContent = '이 크롬에서는 내장 번역을 쓸 수 없습니다 (크롬 138 이상, 데스크톱 필요)'; return; }
+  const lines = [];
+  for (const [src, name] of TR_PAIRS) {
+    const opt = { sourceLanguage: src, targetLanguage: 'ko' };
+    try {
+      let a = await Translator.availability(opt);
+      if (a === 'downloadable' || a === 'downloading') {
+        out.textContent = `${name} → 한국어 모델 내려받는 중…`;
+        const tr = await Translator.create(Object.assign({ monitor(m) { m.addEventListener('downloadprogress', (ev) => { out.textContent = `${name} → 한국어 모델 내려받는 중… ${Math.round(ev.loaded * 100)}%`; }); } }, opt));
+        tr.destroy && tr.destroy();
+        a = await Translator.availability(opt);
+      }
+      lines.push(`${name} → 한국어: ${TR_STATE[a] || a}`);
+    } catch (err) { lines.push(`${name} → 한국어: 실패 (${err && err.name || err})`); }
+  }
+  out.textContent = lines.join(' · ');
+};
+$('trClear').onclick = async () => { await chrome.storage.local.remove('trCache'); $('trStatus').textContent = '번역 기록을 지웠습니다. 다시 번역합니다'; };

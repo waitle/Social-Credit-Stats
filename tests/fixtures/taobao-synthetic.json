@@ -1,0 +1,51 @@
+{
+  "_note": "SYNTHETIC: built from the field shapes observed on a real Taobao account (2026-11). No real names, addresses or order numbers.",
+  "list": {
+    "ret": ["SUCCESS::调用成功"],
+    "data": {
+      "global": { "pageControl": { "hasMore": "true", "nextPageIndex": "2" } },
+      "data": {
+        "shopInfo_1000000000000000001": { "tag": "shopInfo", "fields": { "orderId": "1000000000000000001", "createTime": "2026-10-20 09:15:33", "shopName": "Test Shop A", "sellerName": "seller_a", "tradeTitle": "交易成功" } },
+        "orderPayment_1000000000000000001": { "tag": "orderPayment", "fields": { "totalFee": "￥268.00", "actualFee": "￥268.00", "discountFee": "￥10.00", "pcPostFee": "￥0.00", "serviceDesc": "含官方直邮服务" } },
+        "orderItemInfo_1000000000000000001_1": { "tag": "orderItemInfo", "fields": { "orderId": "1000000000000000001", "item": { "itemId": "700000000001", "title": "Test 서버 CPU 방열판 heatsink", "skuText": "9U", "quantity": "2", "pic": "//img.alicdn.com/imgextra/a.jpg", "priceInfo": { "actualTotalFee": "￥268.00" } } } },
+        "orderExt_1000000000000000001": { "tag": "orderExt", "fields": { "canViewLogistics": "true" } },
+
+        "shopInfo_1000000000000000002": { "tag": "shopInfo", "fields": { "orderId": "1000000000000000002", "createTime": "2026-10-25 18:00:00", "shopName": "Test Shop B", "tradeTitle": "交易关闭" } },
+        "orderPayment_1000000000000000002": { "tag": "orderPayment", "fields": { "totalFee": "￥50.50", "actualFee": "￥50.50" } },
+        "orderItemInfo_1000000000000000002_1": { "tag": "orderItemInfo", "fields": { "item": { "itemId": "700000000002", "title": "Test USB cable", "quantity": "1", "priceInfo": { "actualTotalFee": "￥50.50" }, "refundStatus": "退款成功" } } },
+
+        "shopInfo_1000000000000000003": { "tag": "shopInfo", "fields": { "orderId": "1000000000000000003", "createTime": "2026-11-01 10:00:00", "shopName": "Test Shop A", "tradeTitle": "卖家已发货" } },
+        "orderPayment_1000000000000000003": { "tag": "orderPayment", "fields": { "actualFee": "￥1,200.00" } },
+        "orderItemInfo_1000000000000000003_1": { "tag": "orderItemInfo", "fields": { "item": { "itemId": "700000000003", "title": "Test LED lamp", "quantity": "1", "priceInfo": { "actualTotalFee": "￥1,200.00" } } } },
+
+        "shopInfo_1000000000000000004": { "tag": "shopInfo", "fields": { "orderId": "1000000000000000004", "createTime": "2026-11-05", "shopName": "Test Shop C", "tradeTitle": "买家已付款" } },
+        "orderPayment_1000000000000000004": { "tag": "orderPayment", "fields": { "actualFee": "￥30.00" } },
+        "orderItemInfo_1000000000000000004_1": { "tag": "orderItemInfo", "fields": { "item": { "itemId": "700000000004", "title": "Test sticker", "quantity": "3", "priceInfo": { "actualTotalFee": "￥30.00" } } } }
+      }
+    }
+  },
+  "detailForwarder": {
+    "ret": ["SUCCESS::调用成功"],
+    "data": {
+      "detailInfo": { "labels": [
+        { "tag": "RECEIVE_INFO", "name": "收货信息:", "value": "中韩E递（不同订单分开发货），086-132****7761，山东省 威海市 环翠区 测试路1号" },
+        { "tag": "ORDER_ID", "name": "订单编号:", "value": "1000000000000000001" },
+        { "tag": "CREATE", "name": "创建时间:", "value": "2026-10-20 09:15:33" },
+        { "tag": "PAY", "name": "付款时间:", "value": "2026-10-20 09:16:40" },
+        { "tag": "SHIP", "name": "发货时间:", "value": "2026-10-22 11:00:00" }
+      ] },
+      "logisticsAddress": { "addressData": { "address": "山东省 威海市 环翠区 测试路1号" } },
+      "settlementInfo": {
+        "orderPriceDetails": [ { "name": "商品总价", "value": "￥268.00" }, { "name": "运费", "value": "￥0.00" } ],
+        "payDetails": [ { "name": "实付款", "value": "KRW 50000" } ]
+      }
+    }
+  },
+  "detailDirect": {
+    "ret": ["SUCCESS::调用成功"],
+    "data": {
+      "detailInfo": { "labels": [ { "tag": "RECEIVE_INFO", "name": "收货信息:", "value": "홍길동, 010-****-1234, 서울특별시 강남구 테스트로 1" } ] },
+      "settlementInfo": { "payDetails": [ { "name": "实付款", "value": "KRW 231000" } ], "orderPriceDetails": [ { "name": "商品总价", "value": "￥1200.00" } ] }
+    }
+  }
+}

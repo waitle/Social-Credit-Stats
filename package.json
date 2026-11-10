@@ -5,7 +5,7 @@
   "scripts": {
     "test": "node --test tests/unit/*.test.cjs",
     "test:server": "cd server && go vet ./... && go test -race ./...",
-    "test:e2e": "node tests/e2e/run.cjs && node tests/e2e/resume.cjs",
+    "test:e2e": "node tests/e2e/run.cjs && node tests/e2e/resume.cjs && node tests/e2e/taobao.cjs",
     "fixtures": "node tests/tools/sanitize.cjs"
   },
   "devDependencies": {
