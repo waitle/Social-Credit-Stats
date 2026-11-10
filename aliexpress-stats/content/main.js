@@ -11,7 +11,7 @@
   initDetailsMessages();
   if (LIST_AUTO) { runListAuto(); return; }      // 백그라운드 자동 갱신: UI 없이 추가분 + 예상 배송일만 갱신
   initUI();
-  const runOnce = (() => { try { const v = sessionStorage.getItem('aes-run-once'); sessionStorage.removeItem('aes-run-once'); return v === '1'; } catch (_) { return false; } })();   // "불러오기"가 새로 연 페이지
+  const runOnce = (() => { try { const v = sessionStorage.getItem('aes-run-once'); sessionStorage.removeItem('aes-run-once'); return v === '1' || v === 'refresh' ? v : ''; } catch (_) { return ''; } })();   // "불러오기"(1)·"새로고침"(refresh)이 새로 연 페이지
   window.addEventListener('pagehide', () => { if (store._t) store.flush(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && store._t) store.flush(); });
   (async () => {
@@ -26,7 +26,7 @@
     if (/\/p\/order\/index/i.test(location.pathname) && (state.settings.auto === true || runOnce)) {
       const t0 = Date.now();
       while (!state.listAt && Date.now() - t0 < 10000) await sleep(60);    // 첫 페이지 응답 대기
-      if (!state.loading) { fetchDetails(false); loadAll({ auto: true }); }               // 예상 배송일 조회는 목록 로딩과 동시에 진행
+      if (!state.loading) { fetchDetails(runOnce === 'refresh'); loadAll({ auto: true }); }   // 예상 배송일 조회는 목록 로딩과 동시에 진행 (새로고침이면 배송 중 주문 전부 다시 조회)
     }
   })();
 })();

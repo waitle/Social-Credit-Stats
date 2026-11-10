@@ -298,7 +298,7 @@ function renderNow() {
       <div class="main">
         <label class="st">기간 <select data-input="period">${PERIODS.map((p) => `<option value="${p[0]}" ${(state.settings.period || '1w') === p[0] ? 'selected' : ''}>${p[1]}</option>`).join('')}</select></label>
         ${state.loading ? '<button class="b" data-act="stop">중단</button>' : '<button class="b pri" data-act="loadall">' + (resumable ? '이어서 불러오기' : '불러오기') + '</button>'}
-        ${state.detail || state.detailBusy ? '<button class="b" data-act="stopdetail">새로고침 중단</button>' : '<button class="b" data-act="details">배송현황 새로고침</button>'}
+        ${state.detail || state.detailBusy ? '<button class="b" data-act="stopdetail">새로고침 중단</button>' : '<button class="b" data-act="details" title="최근 주문 목록과 배송 대기·진행 주문의 배송 현황을 함께 새로 불러옵니다">새로고침</button>'}
         <button class="b ghost" data-act="more" style="margin-left:auto">설정 ${state.moreOpen ? '▴' : '▾'}</button>
       </div>
       ${state.moreOpen ? `<div class="more">
@@ -356,6 +356,15 @@ function requestLoad() {
   loadAll();
 }
 
+/** 새로고침: 페이지를 새로 열어 최근 주문 목록(첫 페이지 + 추가분)을 받고, 배송 대기·진행 주문의 배송 현황도 모두 다시 조회한다 */
+function requestRefresh() {
+  releaseHold();
+  if (state.loading || !/\/p\/order\/index/i.test(location.pathname)) { fetchDetails(true); return; }   // 목록을 받는 중이거나 주문 목록 페이지가 아니면 배송 현황만
+  state.progress = '최근 주문과 배송 현황을 새로 불러오려고 페이지를 새로 엽니다…'; state.progressDetail = ''; renderNow();
+  try { sessionStorage.setItem('aes-run-once', 'refresh'); } catch (_) {}
+  store.flush().then(() => location.reload());
+}
+
 function bindEvents() {
   root.addEventListener('focusout', () => { if (renderDeferred) { renderDeferred = false; scheduleRender(); } });
   root.addEventListener('click', (e) => {
@@ -367,7 +376,7 @@ function bindEvents() {
     else if (act === 'toggle') { state.open = !state.open; if (state.open) scanDom(); renderNow(); }
     else if (act === 'loadall') requestLoad();
     else if (act === 'stop') { state.cancel = true; }
-    else if (act === 'details') { releaseHold(); fetchDetails(true); }
+    else if (act === 'details') requestRefresh();
     else if (act === 'stopdetail') { state.cancelDetail = true; try { chrome.runtime.sendMessage({ type: 'cancelDetails' }); } catch (_) {} }
     else if (act === 'rescan') { releaseHold(); const n = scanDom(true); state.progress = `다시 읽음 (변경 ${n}건)`; renderNow(); }
     else if (act === 'csv') exportCsv();
